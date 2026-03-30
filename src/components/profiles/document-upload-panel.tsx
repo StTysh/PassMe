@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,10 +61,13 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Add document</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Upload className="size-4 text-primary" />
+          Add document
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Document type</Label>
             <Select value={type} onChange={(event) => setType(event.target.value as typeof type)}>
@@ -76,7 +80,7 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
           </div>
           <div className="space-y-2">
             <Label>Title</Label>
-            <Input value={title} onChange={(event) => setTitle(event.target.value)} />
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Document title" />
           </div>
         </div>
         <div className="space-y-2">
@@ -85,11 +89,11 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
         </div>
         <div className="space-y-2">
           <Label>Or paste text</Label>
-          <Textarea value={text} onChange={(event) => setText(event.target.value)} />
+          <Textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Paste document content here..." />
         </div>
         <div className="flex justify-end">
           <Button type="button" onClick={handleSubmit} disabled={pending}>
-            Save document
+            {pending ? "Saving..." : "Save document"}
           </Button>
         </div>
       </CardContent>

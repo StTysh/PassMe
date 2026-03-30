@@ -19,18 +19,18 @@ export function RewrittenAnswerCard({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Sparkles className="size-5 text-primary" />
+          <Sparkles className="size-4 text-primary" />
           {title}
         </CardTitle>
-        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
           Rewrites turn {originalTurnIndex + 1}
         </p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="rounded-2xl border border-border bg-muted/20 p-4">
-          <p className="text-sm leading-7 text-foreground">{improvedAnswer}</p>
+      <CardContent className="space-y-3">
+        <div className="rounded-lg border border-border bg-secondary/40 p-4">
+          <p className="text-sm leading-relaxed">{improvedAnswer}</p>
         </div>
-        <p className="text-sm leading-6 text-muted-foreground">{rationale}</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">{rationale}</p>
       </CardContent>
     </Card>
   );

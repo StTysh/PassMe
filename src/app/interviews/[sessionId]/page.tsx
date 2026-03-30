@@ -7,6 +7,7 @@ import { interviewsRepo } from "@/lib/repositories/interviewsRepo";
 import { personasRepo } from "@/lib/repositories/personasRepo";
 import { transcriptRepo } from "@/lib/repositories/transcriptRepo";
 import { ensureDatabaseReady } from "@/lib/services/bootstrap";
+import { isVoiceEnabled } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export default async function InterviewSessionPage({
   if (session.status === "completed") {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-semibold tracking-tight">Interview complete</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Interview complete</h1>
         <p className="text-sm text-muted-foreground">
           This session is already complete. Open the review to see scores and coaching.
         </p>
@@ -40,20 +41,19 @@ export default async function InterviewSessionPage({
   }
 
   return (
-    <div className="space-y-6">
-      <InterviewChatClient
-        sessionId={sessionId}
-        sessionMeta={{
-          personaName: persona?.name ?? "Persona",
-          interviewType: session.interviewType,
-          status: session.status,
-          durationMinutes: session.durationMinutes,
-        }}
-        initialTurns={turns.map((turn) => ({
-          ...turn,
-          speaker: turn.speaker as "agent" | "candidate" | "system",
-        }))}
-      />
-    </div>
+    <InterviewChatClient
+      sessionId={sessionId}
+      sessionMeta={{
+        personaName: persona?.name ?? "Persona",
+        interviewType: session.interviewType,
+        status: session.status,
+        durationMinutes: session.durationMinutes,
+      }}
+      initialTurns={turns.map((turn) => ({
+        ...turn,
+        speaker: turn.speaker as "agent" | "candidate" | "system",
+      }))}
+      voiceEnabled={isVoiceEnabled}
+    />
   );
 }

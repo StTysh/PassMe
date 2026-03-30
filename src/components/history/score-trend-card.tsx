@@ -23,13 +23,13 @@ export function ScoreTrendCard({ title = "Score trend", points }: ScoreTrendCard
           {points.map((point) => (
             <div key={point.label} className="flex flex-1 flex-col items-center gap-2">
               <div
-                className="w-full rounded-t-2xl bg-primary/85"
+                className="w-full rounded-t-lg bg-primary/80 transition-all hover:bg-primary"
                 style={{ height: `${Math.max(12, (point.score / maxScore) * 100)}%` }}
                 title={`${point.label}: ${point.score}`}
               />
               <div className="text-center">
-                <p className="text-xs font-medium text-foreground">{Math.round(point.score)}</p>
-                <p className="text-[11px] text-muted-foreground">{point.label}</p>
+                <p className="text-xs font-semibold tabular-nums">{Math.round(point.score)}</p>
+                <p className="text-[10px] text-muted-foreground">{point.label}</p>
               </div>
             </div>
           ))}

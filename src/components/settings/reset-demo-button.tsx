@@ -19,11 +19,11 @@ export function ResetDemoButton() {
 
   return (
     <div className="flex items-center gap-3">
-      <Button onClick={handleReset} disabled={status === "loading"}>
+      <Button onClick={handleReset} disabled={status === "loading"} variant="outline">
         {status === "loading" ? "Resetting..." : "Reset demo data"}
       </Button>
-      {status === "done" && <span className="text-sm text-green-600">Done</span>}
-      {status === "error" && <span className="text-sm text-destructive">Failed</span>}
+      {status === "done" && <span className="text-sm text-emerald-400">Done</span>}
+      {status === "error" && <span className="text-sm text-red-400">Failed</span>}
     </div>
   );
 }

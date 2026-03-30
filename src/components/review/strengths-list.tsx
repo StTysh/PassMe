@@ -21,25 +21,25 @@ export function StrengthsList({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <CheckCircle2 className="size-5 text-emerald-600" />
+          <CheckCircle2 className="size-4 text-emerald-400" />
           Strengths
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3">
         {items.length ? (
           items.map((item) => (
-            <article key={item.title} className="rounded-2xl border border-border bg-muted/25 p-4">
-              <h3 className="font-semibold">{item.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.body}</p>
+            <article key={item.title} className="rounded-lg border border-border bg-secondary/40 p-4">
+              <h3 className="text-sm font-semibold">{item.title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{item.body}</p>
               {item.sourceLabel ? (
-                <p className="mt-3 text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
                   {item.sourceLabel}
                 </p>
               ) : null}
             </article>
           ))
         ) : (
-          <p className="text-sm leading-6 text-muted-foreground">{emptyLabel}</p>
+          <p className="text-sm text-muted-foreground">{emptyLabel}</p>
         )}
       </CardContent>
     </Card>

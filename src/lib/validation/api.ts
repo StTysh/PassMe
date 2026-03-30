@@ -17,14 +17,12 @@ export {
   speakerSchema,
 } from "@/lib/types/domain";
 
-export const interviewerResponseSchema = z
-  .object({
-    agentMessage: z.string().min(1),
-    questionCategory: z.string().min(1).optional(),
-    shouldEnd: z.boolean(),
-    rationale: z.string().min(1).optional(),
-  })
-  .strict();
+export const interviewerResponseSchema = z.object({
+  agentMessage: z.string().min(1),
+  questionCategory: z.string().min(1).optional(),
+  shouldEnd: z.boolean(),
+  rationale: z.string().min(1).optional(),
+});
 
 export const apiErrorSchema = z
   .object({

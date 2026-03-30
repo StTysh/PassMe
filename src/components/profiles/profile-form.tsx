@@ -68,7 +68,7 @@ export function ProfileForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{mode === "create" ? "Create profile" : "Edit profile"}</CardTitle>
+        <CardTitle>{mode === "create" ? "Profile details" : "Update details"}</CardTitle>
       </CardHeader>
       <CardContent>
         <form className="grid gap-5 md:grid-cols-2" onSubmit={onSubmit}>
@@ -96,6 +96,7 @@ export function ProfileForm({
             <Label htmlFor="targetRoles">Target roles</Label>
             <Input
               id="targetRoles"
+              placeholder="Separate with commas"
               defaultValue={initialValues?.targetRoles?.join(", ") ?? ""}
               onChange={(event) =>
                 form.setValue(
@@ -112,7 +113,7 @@ export function ProfileForm({
             <Label htmlFor="notes">Notes</Label>
             <Textarea id="notes" {...form.register("notes")} />
           </div>
-          <div className="md:col-span-2 flex justify-end">
+          <div className="flex justify-end md:col-span-2">
             <Button type="submit" disabled={form.formState.isSubmitting}>
               {mode === "create" ? "Save profile" : "Update profile"}
             </Button>

@@ -39,6 +39,6 @@ export function buildAnalyzeJobPrompt(
     userPrompt,
     responseSchema: jobAnalysisSchema,
     temperature: 0.1,
-    maxOutputTokens: 1200,
+    maxOutputTokens: 8192,
   };
 }

@@ -12,15 +12,15 @@ export function ErrorAlert({
   onRetry?: () => void;
 }) {
   return (
-    <div className="rounded-[1.5rem] border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+    <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm">
       <div className="flex items-start gap-3">
-        <AlertTriangle className="mt-0.5 size-4" />
+        <AlertTriangle className="mt-0.5 size-4 text-red-400" />
         <div>
-          <p className="font-semibold">{title}</p>
-          <p className="mt-1 leading-6 text-destructive/80">{message}</p>
+          <p className="font-semibold text-red-400">{title}</p>
+          <p className="mt-1 leading-relaxed text-red-400/80">{message}</p>
           {onRetry ? (
-            <div className="mt-4">
-              <Button variant="outline" onClick={onRetry}>
+            <div className="mt-3">
+              <Button variant="outline" size="sm" onClick={onRetry}>
                 Try again
               </Button>
             </div>

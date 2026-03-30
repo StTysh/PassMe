@@ -20,20 +20,20 @@ export function NextStepsList({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <ArrowRightCircle className="size-5 text-primary" />
+          <ArrowRightCircle className="size-4 text-primary" />
           Next steps
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {items.length ? (
           items.map((item) => (
-            <article key={item.title} className="rounded-2xl border border-border bg-muted/25 p-4">
-              <h3 className="font-semibold">{item.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.body}</p>
+            <article key={item.title} className="rounded-lg border border-border bg-secondary/40 p-4">
+              <h3 className="text-sm font-semibold">{item.title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{item.body}</p>
             </article>
           ))
         ) : (
-          <p className="text-sm leading-6 text-muted-foreground">{emptyLabel}</p>
+          <p className="text-sm text-muted-foreground">{emptyLabel}</p>
         )}
       </CardContent>
     </Card>

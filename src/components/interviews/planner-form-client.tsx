@@ -71,7 +71,7 @@ export function PlannerFormClient({
       <CardHeader>
         <CardTitle>Generate interview plan</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-2">
+      <CardContent className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2">
           <Label>Candidate profile</Label>
           <Select
@@ -152,9 +152,9 @@ export function PlannerFormClient({
             ))}
           </Select>
         </div>
-        <div className="md:col-span-2 flex justify-end">
+        <div className="flex items-end justify-end md:col-span-2">
           <Button onClick={handleGenerate} disabled={pending || !profileId || !jobId}>
-            Generate interview plan
+            {pending ? "Generating..." : "Generate interview plan"}
           </Button>
         </div>
       </CardContent>

@@ -13,19 +13,19 @@ export type DimensionScoreGridProps = {
 
 export function DimensionScoreGrid({ items }: DimensionScoreGridProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {items.map((item) => (
         <Card key={item.label}>
-          <CardHeader className="space-y-3">
+          <CardHeader className="space-y-3 pb-3">
             <div className="flex items-start justify-between gap-4">
-              <CardTitle className="text-lg">{item.label}</CardTitle>
-              <span className="text-2xl font-semibold">{Math.round(item.score)}</span>
+              <CardTitle className="text-sm">{item.label}</CardTitle>
+              <span className="text-xl font-bold tabular-nums">{Math.round(item.score)}</span>
             </div>
             <Progress value={item.score} />
           </CardHeader>
           {item.description ? (
             <CardContent>
-              <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{item.description}</p>
             </CardContent>
           ) : null}
         </Card>

@@ -119,6 +119,6 @@ export function buildLiveInterviewerPrompt(
     userPrompt,
     responseSchema: interviewerResponseSchema,
     temperature: 0.5,
-    maxOutputTokens: 500,
+    maxOutputTokens: 4096,
   };
 }

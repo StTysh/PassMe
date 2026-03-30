@@ -12,6 +12,7 @@ export interface GeminiTextRequest {
   model?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  responseMimeType?: string;
 }
 
 export type GeminiTextFailureReason =
@@ -47,7 +48,7 @@ export async function generateGeminiText(
         systemInstruction: request.systemInstruction,
         temperature: request.temperature,
         maxOutputTokens: request.maxOutputTokens,
-        responseMimeType: GEMINI_TEXT_RESPONSE_MIME_TYPE,
+        responseMimeType: request.responseMimeType ?? GEMINI_TEXT_RESPONSE_MIME_TYPE,
       },
     });
 

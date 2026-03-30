@@ -22,19 +22,21 @@ export function ScoreCard({
       <CardHeader className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.18em] text-primary">
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
               {label}
             </p>
-            <CardTitle className="mt-2 text-4xl">{Math.round(overallScore)}</CardTitle>
+            <CardTitle className="mt-2 text-4xl font-bold tabular-nums">
+              {Math.round(overallScore)}
+            </CardTitle>
           </div>
           <Badge variant="secondary">{band}</Badge>
         </div>
         <Progress value={overallScore} />
       </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-sm leading-7 text-muted-foreground">{summary}</p>
+      <CardContent className="space-y-2">
+        <p className="text-sm leading-relaxed text-muted-foreground">{summary}</p>
         {context ? (
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
             {context}
           </p>
         ) : null}

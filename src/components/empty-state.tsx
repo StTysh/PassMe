@@ -18,14 +18,14 @@ export function EmptyState({
   actionHref,
 }: EmptyStateProps) {
   return (
-    <section className="rounded-[2rem] border border-border/80 bg-card px-6 py-10 text-center shadow-sm sm:px-8">
-      <p className="text-sm font-medium uppercase tracking-[0.18em] text-primary">
+    <section className="rounded-xl border border-border bg-card px-6 py-12 text-center">
+      <p className="text-xs font-semibold uppercase tracking-widest text-primary">
         {eyebrow}
       </p>
-      <h2 className="mx-auto mt-3 max-w-2xl text-3xl font-semibold tracking-tight">
+      <h2 className="mx-auto mt-3 max-w-xl text-2xl font-semibold tracking-tight">
         {title}
       </h2>
-      <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
+      <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
         {description}
       </p>
       {actionLabel && actionHref ? (

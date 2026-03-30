@@ -118,7 +118,7 @@ export function buildInterviewPlanPrompt(
     userPrompt,
     responseSchema: interviewPlanSchema,
     temperature: 0.2,
-    maxOutputTokens: 1400,
+    maxOutputTokens: 8192,
   };
 }
 

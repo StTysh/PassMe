@@ -24,8 +24,8 @@ export default function InterviewSetupPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Interview setup</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <h1 className="text-2xl font-bold tracking-tight">Interview setup</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Select a parsed candidate and target role, then generate a role-aware plan.
         </p>
       </div>

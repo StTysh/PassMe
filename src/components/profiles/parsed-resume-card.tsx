@@ -12,7 +12,7 @@ export function ParsedResumeCard({
       </CardHeader>
       <CardContent>
         {parsed ? (
-          <pre className="overflow-x-auto rounded-2xl bg-muted/40 p-4 text-xs">
+          <pre className="overflow-x-auto rounded-lg bg-secondary/60 p-4 text-xs leading-relaxed text-muted-foreground">
             {JSON.stringify(parsed, null, 2)}
           </pre>
         ) : (

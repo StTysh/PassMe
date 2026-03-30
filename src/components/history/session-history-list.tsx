@@ -27,42 +27,42 @@ export function SessionHistoryList({
   emptyLabel = "No sessions yet.",
 }: SessionHistoryListProps) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {sessions.length ? (
         sessions.map((session) => (
           <Card key={session.id}>
-            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
+            <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <Badge variant="outline">{session.interviewType}</Badge>
                   <Badge variant="secondary">{session.personaName}</Badge>
                   <Badge>{session.difficulty}</Badge>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">{session.profileName}</h3>
-                  <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                    <CalendarClock className="size-4" />
+                  <h3 className="font-semibold">{session.profileName}</h3>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <CalendarClock className="size-3.5" />
                     {session.dateLabel}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-4">
                 <div className="text-right">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
                     Score
                   </p>
-                  <p className="text-3xl font-semibold">{Math.round(session.score)}</p>
+                  <p className="text-2xl font-bold tabular-nums">{Math.round(session.score)}</p>
                   {typeof session.delta === "number" ? (
-                    <p className="text-sm text-muted-foreground">
+                    <p className={`text-xs ${session.delta >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                       {session.delta >= 0 ? "+" : ""}
-                      {session.delta.toFixed(1)} vs previous
+                      {session.delta.toFixed(1)} vs prev
                     </p>
                   ) : null}
                 </div>
-                <Button asChild variant="secondary">
+                <Button asChild variant="ghost" size="sm">
                   <Link href={session.href}>
                     View
-                    <ArrowRight className="size-4" />
+                    <ArrowRight className="ml-1 size-3.5" />
                   </Link>
                 </Button>
               </div>

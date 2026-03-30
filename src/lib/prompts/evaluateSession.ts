@@ -63,6 +63,6 @@ export function buildEvaluateSessionPrompt(
     userPrompt,
     responseSchema: evaluationSchema,
     temperature: 0.1,
-    maxOutputTokens: 1600,
+    maxOutputTokens: 8192,
   };
 }

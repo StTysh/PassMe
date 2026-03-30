@@ -18,10 +18,10 @@ export default async function EditProfilePage({
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Edit profile</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <h1 className="text-2xl font-bold tracking-tight">Edit profile</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Keep the candidate context current before running another interview.
         </p>
       </div>

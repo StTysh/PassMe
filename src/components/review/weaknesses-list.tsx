@@ -22,16 +22,16 @@ export function WeaknessesList({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <AlertTriangle className="size-5 text-amber-600" />
+          <AlertTriangle className="size-4 text-amber-400" />
           Weaknesses
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3">
         {items.length ? (
           items.map((item) => (
-            <article key={item.title} className="rounded-2xl border border-border bg-muted/25 p-4">
+            <article key={item.title} className="rounded-lg border border-border bg-secondary/40 p-4">
               <div className="flex items-start justify-between gap-3">
-                <h3 className="font-semibold">{item.title}</h3>
+                <h3 className="text-sm font-semibold">{item.title}</h3>
                 <Badge
                   variant={
                     item.severity === "high"
@@ -44,11 +44,11 @@ export function WeaknessesList({
                   {item.severity}
                 </Badge>
               </div>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.body}</p>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{item.body}</p>
             </article>
           ))
         ) : (
-          <p className="text-sm leading-6 text-muted-foreground">{emptyLabel}</p>
+          <p className="text-sm text-muted-foreground">{emptyLabel}</p>
         )}
       </CardContent>
     </Card>

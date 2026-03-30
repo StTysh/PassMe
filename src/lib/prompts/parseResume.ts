@@ -41,6 +41,6 @@ export function buildParseResumePrompt(
     userPrompt,
     responseSchema: resumeProfileSchema,
     temperature: 0.1,
-    maxOutputTokens: 1600,
+    maxOutputTokens: 8192,
   };
 }

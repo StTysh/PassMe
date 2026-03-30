@@ -35,13 +35,13 @@ export default async function ReviewPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Interview review</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Interview review</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Score breakdown, targeted feedback, and concrete next steps.
           </p>
         </div>
         <Button asChild>
-          <Link href="/interviews/new">Retry this interview</Link>
+          <Link href="/interviews/new">Retry interview</Link>
         </Button>
       </div>
 
@@ -85,7 +85,7 @@ export default async function ReviewPage({
           .map((item) => ({ title: item.title, body: item.body }))}
       />
 
-      <div className="grid gap-6">
+      <div className="grid gap-4">
         {feedback
           .filter((item) => item.category === "rewritten_answer")
           .map((item) => (

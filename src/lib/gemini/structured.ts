@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { GEMINI_DEFAULT_MODEL } from "@/lib/gemini/models";
+import { GEMINI_DEFAULT_MODEL, GEMINI_JSON_RESPONSE_MIME_TYPE } from "@/lib/gemini/models";
 import { generateGeminiText, type GeminiTextResult } from "@/lib/gemini/text";
 import type { PromptDefinition } from "@/lib/prompts/shared";
 
@@ -116,9 +116,11 @@ export async function generateGeminiStructured<TSchema extends z.ZodTypeAny>(
       model,
       temperature: request.temperature,
       maxOutputTokens: request.maxOutputTokens,
+      responseMimeType: GEMINI_JSON_RESPONSE_MIME_TYPE,
     });
 
     if (!textResult.ok) {
+      console.error("[Gemini structured] text generation failed:", textResult.reason, textResult.message);
       lastFailure = {
         ok: false,
         reason:
@@ -158,6 +160,7 @@ export async function generateGeminiStructured<TSchema extends z.ZodTypeAny>(
       error: parsed.error,
       attempts: (attemptIndex + 1) as 1 | 2,
     };
+    console.error("[Gemini structured] attempt", attemptIndex + 1, "failed:", parsed.reason, parsed.issues ?? parsed.error);
   }
 
   if (lastFailure) {

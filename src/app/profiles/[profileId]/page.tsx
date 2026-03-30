@@ -30,16 +30,16 @@ export default async function ProfileDetailPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">{workspace.profile.fullName}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">{workspace.profile.fullName}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Resume, target job, and session history live together here.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button asChild variant="secondary">
+          <Button asChild variant="outline" size="sm">
             <Link href={`/profiles/${workspace.profile.id}/edit`}>Edit profile</Link>
           </Button>
-          <Button asChild>
+          <Button asChild size="sm">
             <Link href="/interviews/new">Start interview</Link>
           </Button>
         </div>
@@ -47,7 +47,7 @@ export default async function ProfileDetailPage({
 
       <ProfileSummary profile={workspace.profile} />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+      <div className="grid gap-4 xl:grid-cols-2">
         <DocumentUploadPanel profileId={workspace.profile.id} />
         <ParsedResumeCard parsed={parsedResume as Record<string, unknown> | null} />
       </div>

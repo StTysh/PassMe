@@ -77,6 +77,6 @@ export function buildCoachSessionPrompt(
     userPrompt,
     responseSchema: coachingSchema,
     temperature: 0.2,
-    maxOutputTokens: 1600,
+    maxOutputTokens: 8192,
   };
 }

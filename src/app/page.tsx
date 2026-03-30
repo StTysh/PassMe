@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles, Zap, Target, TrendingUp } from "lucide-react";
 
 import { SessionHistoryList } from "@/components/history/session-history-list";
 import { Button } from "@/components/ui/button";
@@ -12,42 +12,66 @@ export default function HomePage() {
 
   return (
     <div className="space-y-8">
-      <section className="overflow-hidden rounded-[2rem] border border-border/80 bg-card shadow-[0_30px_80px_-50px_rgba(16,38,56,0.55)]">
-        <div className="grid gap-8 px-8 py-10 lg:grid-cols-[1.2fr_0.8fr] lg:px-10 lg:py-12">
+      <section className="relative overflow-hidden rounded-xl border border-border bg-card">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/5" />
+        <div className="relative grid gap-8 p-8 lg:grid-cols-[1.3fr_0.7fr] lg:p-10">
           <div className="space-y-6">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-primary">
+            <div className="inline-flex items-center gap-2 rounded-md bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">
               <Sparkles className="size-3.5" />
               Interview Loop
             </div>
-            <div className="space-y-4">
-              <h1 className="max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
-                Practice the interview you&apos;re actually going to have.
-              </h1>
-              <p className="max-w-2xl text-lg leading-8 text-muted-foreground">
-                Upload your resume, paste the job description, choose an interviewer persona, and get role-specific feedback.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <h1 className="max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
+              Practice the interview you&apos;re actually going to have.
+            </h1>
+            <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
+              Upload your resume, paste the job description, choose an interviewer persona, and get role-specific AI coaching.
+            </p>
+            <div className="flex flex-wrap gap-3">
               <Button asChild size="lg">
                 <Link href="/profiles/new">
                   Create profile
-                  <ArrowRight className="size-4" />
+                  <ArrowRight className="ml-1 size-4" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="secondary">
+              <Button asChild size="lg" variant="outline">
                 <Link href="/interviews/new">Try demo</Link>
               </Button>
             </div>
           </div>
 
-          <div className="rounded-[1.75rem] border border-border/70 bg-muted/60 p-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">
-              Demo-ready loop
-            </p>
-            <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <p>1. Create or use the seeded Alex Morgan profile.</p>
-              <p>2. Upload a real resume or use seeded materials.</p>
-              <p>3. Generate a plan, run a text interview, and review coaching.</p>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-border bg-secondary/40 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15">
+                  <Zap className="size-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">AI-powered simulations</p>
+                  <p className="text-xs text-muted-foreground">Realistic role-aware interviews</p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-secondary/40 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15">
+                  <Target className="size-4 text-accent" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Targeted feedback</p>
+                  <p className="text-xs text-muted-foreground">Strengths, gaps, and rewrites</p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-secondary/40 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15">
+                  <TrendingUp className="size-4 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Track progress</p>
+                  <p className="text-xs text-muted-foreground">Scores and trends over time</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -55,9 +79,9 @@ export default function HomePage() {
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold">Recent sessions</h2>
-          <Button asChild variant="outline">
-            <Link href="/history">Open history</Link>
+          <h2 className="text-xl font-semibold">Recent sessions</h2>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/history">View all</Link>
           </Button>
         </div>
         <SessionHistoryList

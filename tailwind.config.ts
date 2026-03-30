@@ -47,6 +47,8 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        success: "hsl(var(--success))",
+        warning: "hsl(var(--warning))",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -56,10 +58,6 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-manrope)"],
         mono: ["var(--font-ibm-plex-mono)"],
-      },
-      backgroundImage: {
-        "hero-grid":
-          "linear-gradient(to right, rgba(20, 31, 44, 0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(20, 31, 44, 0.06) 1px, transparent 1px)",
       },
     },
   },
