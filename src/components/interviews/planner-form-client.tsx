@@ -3,9 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Loader2, Play } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import {
@@ -20,15 +21,21 @@ export function PlannerFormClient({
   profiles,
   jobs,
   personas,
+  defaultProfileId,
 }: {
   profiles: Array<{ id: string; fullName: string }>;
   jobs: Array<{ id: string; title: string; candidateProfileId: string }>;
   personas: Array<{ key: string; name: string; description: string }>;
+  defaultProfileId?: string;
 }) {
   const router = useRouter();
-  const [profileId, setProfileId] = useState(profiles[0]?.id ?? "");
+  const initialProfile =
+    (defaultProfileId && profiles.find((p) => p.id === defaultProfileId)?.id) ||
+    profiles[0]?.id ||
+    "";
+  const [profileId, setProfileId] = useState(initialProfile);
   const [jobId, setJobId] = useState(
-    jobs.find((job) => job.candidateProfileId === profiles[0]?.id)?.id ?? jobs[0]?.id ?? "",
+    jobs.find((job) => job.candidateProfileId === initialProfile)?.id ?? jobs[0]?.id ?? "",
   );
   const [personaKey, setPersonaKey] = useState(personas[1]?.key ?? personas[0]?.key ?? "");
   const [interviewType, setInterviewType] = useState(INTERVIEW_TYPES[1]?.value ?? "hiring_manager");
@@ -56,7 +63,7 @@ export function PlannerFormClient({
         }),
       });
 
-      toast.success("Interview plan generated");
+      toast.success("Interview plan generated — starting session...");
       router.push(`/interviews/${result.sessionId}`);
       router.refresh();
     } catch (error) {
@@ -70,8 +77,11 @@ export function PlannerFormClient({
     <Card>
       <CardHeader>
         <CardTitle>Generate interview plan</CardTitle>
+        <CardDescription>
+          Choose your candidate profile, target role, and interview parameters.
+        </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-5 md:grid-cols-2">
+      <CardContent className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Candidate profile</Label>
           <Select
@@ -92,11 +102,15 @@ export function PlannerFormClient({
         <div className="space-y-2">
           <Label>Job description</Label>
           <Select value={jobId} onChange={(event) => setJobId(event.target.value)}>
-            {filteredJobs.map((job) => (
-              <option key={job.id} value={job.id}>
-                {job.title}
-              </option>
-            ))}
+            {filteredJobs.length > 0 ? (
+              filteredJobs.map((job) => (
+                <option key={job.id} value={job.id}>
+                  {job.title}
+                </option>
+              ))
+            ) : (
+              <option value="">No jobs for this profile</option>
+            )}
           </Select>
         </div>
         <div className="space-y-2">
@@ -152,9 +166,19 @@ export function PlannerFormClient({
             ))}
           </Select>
         </div>
-        <div className="flex items-end justify-end md:col-span-2">
-          <Button onClick={handleGenerate} disabled={pending || !profileId || !jobId}>
-            {pending ? "Generating..." : "Generate interview plan"}
+        <div className="flex items-end justify-end sm:col-span-2">
+          <Button onClick={handleGenerate} disabled={pending || !profileId || !jobId} variant="glow">
+            {pending ? (
+              <>
+                <Loader2 className="mr-1.5 size-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Play className="mr-1.5 size-4" />
+                Generate interview plan
+              </>
+            )}
           </Button>
         </div>
       </CardContent>

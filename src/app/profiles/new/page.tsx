@@ -1,4 +1,4 @@
-import { ProfileForm } from "@/components/profiles/profile-form";
+import { CreateProfileWizard } from "@/components/profiles/create-profile-wizard";
 
 export default function NewProfilePage() {
   return (
@@ -6,10 +6,10 @@ export default function NewProfilePage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Create profile</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Add candidate details that anchor resume parsing, interview plans, and history.
+          Set up your candidate details, then attach your resume and job description.
         </p>
       </div>
-      <ProfileForm mode="create" />
+      <CreateProfileWizard />
     </div>
   );
 }

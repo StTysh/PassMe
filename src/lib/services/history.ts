@@ -60,29 +60,45 @@ export const historyService = {
           ) / 10
         : null;
 
-    const strongestDimension =
-      mapped.length > 0
-        ? dimensions
-            .map((dimension) => ({
-              dimension,
-              avg:
-                mapped.reduce((sum, session) => {
-                  const score = session.score;
-                  if (!score) return sum;
-                  const key = `${dimension}Score` as const;
-                  return sum + score[key];
-                }, 0) / Math.max(mapped.filter((session) => session.score).length, 1),
-            }))
-            .sort((a, b) => b.avg - a.avg)[0]?.dimension ?? null
-        : null;
+    const scoredSessions = mapped.filter((session) => session.score);
+
+    const dimensionAverages =
+      scoredSessions.length > 0
+        ? dimensions.map((dimension) => ({
+            dimension,
+            avg:
+              scoredSessions.reduce((sum, session) => {
+                const key = `${dimension}Score` as const;
+                return sum + (session.score?.[key] ?? 0);
+              }, 0) / scoredSessions.length,
+          }))
+        : [];
+
+    const sorted = [...dimensionAverages].sort((a, b) => b.avg - a.avg);
+    const strongestDimension = sorted[0] ?? null;
+    const weakestDimension = sorted[sorted.length - 1] ?? null;
+
+    const bestScore =
+      completedScores.length > 0 ? Math.max(...completedScores) : null;
+    const latestBand = scoredSessions[0]?.score?.band ?? null;
 
     return {
       sessions: mapped,
       summary: {
         averageScore,
         completedSessions: mapped.filter((session) => session.status === "completed").length,
-        strongestDimension,
-        biggestImprovementArea: null,
+        strongestDimension: strongestDimension
+          ? { name: strongestDimension.dimension, avg: Math.round(strongestDimension.avg * 10) / 10 }
+          : null,
+        weakestDimension: weakestDimension && weakestDimension.dimension !== strongestDimension?.dimension
+          ? { name: weakestDimension.dimension, avg: Math.round(weakestDimension.avg * 10) / 10 }
+          : null,
+        bestScore,
+        latestBand,
+        dimensionAverages: dimensionAverages.map((d) => ({
+          dimension: d.dimension,
+          avg: Math.round(d.avg * 10) / 10,
+        })),
       },
     };
   },

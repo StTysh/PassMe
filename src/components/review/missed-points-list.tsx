@@ -27,7 +27,10 @@ export function MissedPointsList({
       <CardContent className="space-y-3">
         {items.length ? (
           items.map((item) => (
-            <article key={item.title} className="rounded-lg border border-border bg-secondary/40 p-4">
+            <article
+              key={item.title}
+              className="rounded-xl border border-border bg-secondary/20 p-4 transition-colors hover:border-primary/15"
+            >
               <h3 className="text-sm font-semibold">{item.title}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{item.body}</p>
             </article>

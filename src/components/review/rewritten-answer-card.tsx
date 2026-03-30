@@ -16,7 +16,8 @@ export function RewrittenAnswerCard({
   rationale,
 }: RewrittenAnswerCardProps) {
   return (
-    <Card>
+    <Card className="overflow-hidden">
+      <div className="h-1 bg-gradient-to-r from-primary via-accent to-primary" />
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Sparkles className="size-4 text-primary" />
@@ -27,7 +28,7 @@ export function RewrittenAnswerCard({
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="rounded-lg border border-border bg-secondary/40 p-4">
+        <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
           <p className="text-sm leading-relaxed">{improvedAnswer}</p>
         </div>
         <p className="text-sm leading-relaxed text-muted-foreground">{rationale}</p>

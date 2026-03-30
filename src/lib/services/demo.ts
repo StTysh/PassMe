@@ -1,3 +1,4 @@
+import { getSqliteClient } from "@/db/client";
 import { DEMO_PROFILE_NAME } from "@/lib/constants";
 import { applyInterestLevel, getPersonaByKey } from "@/lib/personas/defaults";
 import { documentsRepo } from "@/lib/repositories/documentsRepo";
@@ -200,4 +201,28 @@ export function ensureDemoData() {
       body: "Go one layer deeper on platform architecture tradeoffs in future answers.",
     },
   ]);
+}
+
+/**
+ * Wipe all user-created content from the database (respecting FK ordering),
+ * clear FTS virtual tables, then re-seed fresh demo data.
+ */
+export function resetAllData() {
+  ensureDatabaseReady();
+  const sqlite = getSqliteClient();
+
+  sqlite.exec(`
+    DELETE FROM feedback_items;
+    DELETE FROM scores;
+    DELETE FROM transcript_turns;
+    DELETE FROM transcript_turns_fts;
+    DELETE FROM interview_sessions;
+    DELETE FROM document_chunks;
+    DELETE FROM document_chunks_fts;
+    DELETE FROM documents;
+    DELETE FROM documents_fts;
+    DELETE FROM candidate_profiles;
+  `);
+
+  ensureDemoData();
 }

@@ -12,9 +12,11 @@ export function ErrorAlert({
   onRetry?: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm">
+    <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-5 text-sm backdrop-blur-sm">
       <div className="flex items-start gap-3">
-        <AlertTriangle className="mt-0.5 size-4 text-red-400" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+          <AlertTriangle className="size-4 text-red-400" />
+        </div>
         <div>
           <p className="font-semibold text-red-400">{title}</p>
           <p className="mt-1 leading-relaxed text-red-400/80">{message}</p>

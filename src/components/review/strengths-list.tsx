@@ -27,8 +27,12 @@ export function StrengthsList({
       </CardHeader>
       <CardContent className="space-y-3">
         {items.length ? (
-          items.map((item) => (
-            <article key={item.title} className="rounded-lg border border-border bg-secondary/40 p-4">
+          items.map((item, i) => (
+            <article
+              key={item.title}
+              className="rounded-xl border border-emerald-500/10 bg-emerald-500/5 p-4 transition-colors hover:border-emerald-500/20"
+              style={{ animationDelay: `${i * 80}ms` }}
+            >
               <h3 className="text-sm font-semibold">{item.title}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{item.body}</p>
               {item.sourceLabel ? (

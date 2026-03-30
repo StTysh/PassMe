@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { BriefcaseBusiness, History, House, Settings2, UserRoundPlus } from "lucide-react";
 
 import { APP_NAME, NAV_ITEMS } from "@/lib/constants";
@@ -12,11 +15,13 @@ const iconMap: Record<string, typeof House> = {
   settings: Settings2,
 };
 
-export function NavSidebar() {
+export function NavSidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-card p-5 lg:flex">
+    <aside className="flex h-full w-full flex-col p-5 lg:w-64 lg:shrink-0 lg:border-r lg:border-border lg:bg-card/50 lg:backdrop-blur-sm">
       <div className="mb-8 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 shadow-sm shadow-primary/10">
           <BriefcaseBusiness className="size-5 text-primary" />
         </div>
         <div>
@@ -28,22 +33,30 @@ export function NavSidebar() {
       <nav className="flex flex-1 flex-col gap-1">
         {NAV_ITEMS.map(({ href, label, icon }) => {
           const Icon = iconMap[icon] ?? House;
+          const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
+              onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                isActive
+                  ? "bg-primary/10 text-primary shadow-sm shadow-primary/5"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground",
               )}
             >
-              <Icon className="size-4" />
+              <Icon className={cn("size-4 transition-colors", isActive && "text-primary")} />
               {label}
+              {isActive && (
+                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+              )}
             </Link>
           );
         })}
       </nav>
 
-      <div className="mt-auto rounded-xl border border-border bg-secondary/50 p-4">
+      <div className="mt-auto rounded-xl border border-border bg-secondary/30 p-4">
         <p className="text-xs font-semibold text-foreground">All systems go</p>
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
           Profiles, interviews, and coaching are ready.

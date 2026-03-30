@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 interface SpeechRecognitionCallbacks {
   onTranscript?: (text: string) => void;
   onSilenceTimeout?: (finalText: string) => void;
+  onError?: (error: string) => void;
 }
 
 interface UseSpeechRecognitionOptions extends SpeechRecognitionCallbacks {
@@ -34,6 +35,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
   cbRef.current = {
     onTranscript: options.onTranscript,
     onSilenceTimeout: options.onSilenceTimeout,
+    onError: options.onError,
   };
 
   useEffect(() => {
@@ -42,7 +44,10 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
 
   const start = useCallback(() => {
     const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) return;
+    if (!Ctor) {
+      cbRef.current.onError?.("Speech recognition is not supported in this browser.");
+      return;
+    }
 
     if (recognitionRef.current) {
       intentionalStopRef.current = true;
@@ -102,9 +107,11 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (event: any) => {
       if (event.error === "not-allowed") {
-        console.error("Microphone permission denied");
+        cbRef.current.onError?.("Microphone permission denied. Please allow microphone access.");
         intentionalStopRef.current = true;
         setIsListening(false);
+      } else if (event.error === "network") {
+        cbRef.current.onError?.("Network error during speech recognition.");
       } else if (event.error !== "aborted" && event.error !== "no-speech") {
         console.error("Speech recognition error:", event.error);
       }
@@ -114,7 +121,9 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       recognition.start();
       recognitionRef.current = recognition;
       setIsListening(true);
-    } catch { /* ignore */ }
+    } catch {
+      cbRef.current.onError?.("Failed to start speech recognition.");
+    }
   }, [lang, silenceMs]);
 
   const stop = useCallback(() => {

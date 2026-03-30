@@ -1,9 +1,9 @@
 import { handleRouteError, ok } from "@/lib/api";
-import { ensureDemoData } from "@/lib/services/demo";
+import { resetAllData } from "@/lib/services/demo";
 
 export async function POST() {
   try {
-    ensureDemoData();
+    resetAllData();
     return ok({ reset: true });
   } catch (error) {
     return handleRouteError(error);

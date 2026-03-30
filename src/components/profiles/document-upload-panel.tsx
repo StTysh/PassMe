@@ -2,10 +2,10 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Upload } from "lucide-react";
+import { Upload, FileText, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -49,7 +49,7 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
         });
       }
 
-      toast.success("Document saved");
+      toast.success("Document saved and parsed");
       window.location.reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Upload failed");
@@ -65,6 +65,9 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
           <Upload className="size-4 text-primary" />
           Add document
         </CardTitle>
+        <CardDescription>
+          Upload a PDF or paste text content directly.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -80,20 +83,38 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
           </div>
           <div className="space-y-2">
             <Label>Title</Label>
-            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Document title" />
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. My Resume 2026" />
           </div>
         </div>
         <div className="space-y-2">
-          <Label>PDF upload</Label>
-          <Input ref={fileRef} type="file" accept=".pdf,.txt" />
+          <Label>PDF or text file</Label>
+          <div className="rounded-xl border border-dashed border-border bg-background/40 p-4 text-center transition-colors hover:border-primary/30">
+            <FileText className="mx-auto size-8 text-muted-foreground/40" />
+            <Input ref={fileRef} type="file" accept=".pdf,.txt" className="mt-2" />
+          </div>
         </div>
         <div className="space-y-2">
-          <Label>Or paste text</Label>
-          <Textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Paste document content here..." />
+          <Label>Or paste text directly</Label>
+          <Textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            placeholder="Paste document content here..."
+            className="min-h-[100px]"
+          />
         </div>
         <div className="flex justify-end">
           <Button type="button" onClick={handleSubmit} disabled={pending}>
-            {pending ? "Saving..." : "Save document"}
+            {pending ? (
+              <>
+                <Loader2 className="mr-1.5 size-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Upload className="mr-1.5 size-4" />
+                Save document
+              </>
+            )}
           </Button>
         </div>
       </CardContent>

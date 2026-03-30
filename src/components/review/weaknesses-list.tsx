@@ -14,6 +14,12 @@ export type WeaknessesListProps = {
   emptyLabel?: string;
 };
 
+const severityBorder: Record<string, string> = {
+  high: "border-red-500/20 bg-red-500/5",
+  medium: "border-amber-500/15 bg-amber-500/5",
+  low: "border-border bg-secondary/30",
+};
+
 export function WeaknessesList({
   items,
   emptyLabel = "No weaknesses captured yet.",
@@ -29,7 +35,10 @@ export function WeaknessesList({
       <CardContent className="space-y-3">
         {items.length ? (
           items.map((item) => (
-            <article key={item.title} className="rounded-lg border border-border bg-secondary/40 p-4">
+            <article
+              key={item.title}
+              className={`rounded-xl border p-4 transition-colors ${severityBorder[item.severity] ?? severityBorder.low}`}
+            >
               <div className="flex items-start justify-between gap-3">
                 <h3 className="text-sm font-semibold">{item.title}</h3>
                 <Badge

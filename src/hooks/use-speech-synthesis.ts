@@ -12,6 +12,7 @@ export function useSpeechSynthesis(options: UseSpeechSynthesisOptions = {}) {
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const cbRef = useRef(options);
   cbRef.current = options;
+  const keepAliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -53,6 +54,10 @@ export function useSpeechSynthesis(options: UseSpeechSynthesisOptions = {}) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
     window.speechSynthesis.cancel();
+    if (keepAliveRef.current) {
+      clearInterval(keepAliveRef.current);
+      keepAliveRef.current = null;
+    }
 
     const utterance = new SpeechSynthesisUtterance(text);
     if (voiceRef.current) utterance.voice = voiceRef.current;
@@ -63,19 +68,47 @@ export function useSpeechSynthesis(options: UseSpeechSynthesisOptions = {}) {
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => {
       setIsSpeaking(false);
+      if (keepAliveRef.current) {
+        clearInterval(keepAliveRef.current);
+        keepAliveRef.current = null;
+      }
       cbRef.current.onEnd?.();
     };
     utterance.onerror = () => {
       setIsSpeaking(false);
+      if (keepAliveRef.current) {
+        clearInterval(keepAliveRef.current);
+        keepAliveRef.current = null;
+      }
     };
 
     window.speechSynthesis.speak(utterance);
+
+    // Chrome pauses long utterances after ~15s; resume/pause keeps it alive
+    keepAliveRef.current = setInterval(() => {
+      if (!window.speechSynthesis.speaking) {
+        if (keepAliveRef.current) clearInterval(keepAliveRef.current);
+        return;
+      }
+      window.speechSynthesis.pause();
+      window.speechSynthesis.resume();
+    }, 10000);
   }, []);
 
   const cancel = useCallback(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
+    if (keepAliveRef.current) {
+      clearInterval(keepAliveRef.current);
+      keepAliveRef.current = null;
+    }
     setIsSpeaking(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (keepAliveRef.current) clearInterval(keepAliveRef.current);
+    };
   }, []);
 
   return { isSpeaking, isSupported, speak, cancel };

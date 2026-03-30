@@ -22,6 +22,13 @@ export type SessionHistoryListProps = {
   emptyLabel?: string;
 };
 
+function scoreColor(score: number) {
+  if (score >= 80) return "text-emerald-400";
+  if (score >= 65) return "text-primary";
+  if (score >= 50) return "text-amber-400";
+  return "text-red-400";
+}
+
 export function SessionHistoryList({
   sessions,
   emptyLabel = "No sessions yet.",
@@ -30,7 +37,10 @@ export function SessionHistoryList({
     <div className="space-y-2">
       {sessions.length ? (
         sessions.map((session) => (
-          <Card key={session.id}>
+          <Card
+            key={session.id}
+            className="transition-all duration-200 hover:border-primary/20 hover:shadow-sm hover:shadow-primary/5"
+          >
             <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -51,9 +61,15 @@ export function SessionHistoryList({
                   <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
                     Score
                   </p>
-                  <p className="text-2xl font-bold tabular-nums">{Math.round(session.score)}</p>
+                  <p className={`text-2xl font-bold tabular-nums ${scoreColor(session.score)}`}>
+                    {Math.round(session.score)}
+                  </p>
                   {typeof session.delta === "number" ? (
-                    <p className={`text-xs ${session.delta >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    <p
+                      className={`text-xs font-medium ${
+                        session.delta >= 0 ? "text-emerald-400" : "text-red-400"
+                      }`}
+                    >
                       {session.delta >= 0 ? "+" : ""}
                       {session.delta.toFixed(1)} vs prev
                     </p>
@@ -62,7 +78,7 @@ export function SessionHistoryList({
                 <Button asChild variant="ghost" size="sm">
                   <Link href={session.href}>
                     View
-                    <ArrowRight className="ml-1 size-3.5" />
+                    <ArrowRight className="ml-1 size-3.5 transition-transform group-hover:translate-x-0.5" />
                   </Link>
                 </Button>
               </div>
@@ -71,7 +87,9 @@ export function SessionHistoryList({
         ))
       ) : (
         <Card>
-          <CardContent className="p-6 text-sm text-muted-foreground">{emptyLabel}</CardContent>
+          <CardContent className="p-8 text-center text-sm text-muted-foreground">
+            {emptyLabel}
+          </CardContent>
         </Card>
       )}
     </div>

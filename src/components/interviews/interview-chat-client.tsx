@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Mic, MicOff, Send, Square, Volume2 } from "lucide-react";
+import { Mic, MicOff, Send, Square, Volume2, Headphones } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { fetchJson } from "@/lib/fetcher";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis";
@@ -76,7 +77,6 @@ export function InterviewChatClient({
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns]);
 
-  // Auto-start interview
   useEffect(() => {
     if (started || pending) return;
 
@@ -160,7 +160,7 @@ export function InterviewChatClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ force: false }),
       });
-      toast.success("Interview finished");
+      toast.success("Interview finished — generating review...");
       router.push(`/interviews/${sessionId}/review`);
       router.refresh();
     } catch (error) {
@@ -190,14 +190,14 @@ export function InterviewChatClient({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
-      <Card className="flex flex-col">
-        <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-border">
-          <div>
-            <CardTitle>{sessionMeta.personaName}</CardTitle>
+    <div className="grid gap-4 sm:gap-6 xl:grid-cols-[1.4fr_0.6fr]">
+      <Card className="flex flex-col overflow-hidden">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 border-b border-border bg-card/60 backdrop-blur-sm">
+          <div className="min-w-0">
+            <CardTitle className="truncate">{sessionMeta.personaName}</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">{sessionMeta.interviewType}</p>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {voiceEnabled && voiceSupported && (
               <Button
                 variant={voiceMode ? "default" : "ghost"}
@@ -206,7 +206,7 @@ export function InterviewChatClient({
                 className="gap-1.5"
               >
                 {voiceMode ? <Volume2 className="size-3.5" /> : <MicOff className="size-3.5" />}
-                {voiceMode ? "Voice on" : "Voice off"}
+                <span className="hidden sm:inline">{voiceMode ? "Voice on" : "Voice off"}</span>
               </Button>
             )}
             <Badge variant="secondary">{sessionMeta.status}</Badge>
@@ -214,54 +214,64 @@ export function InterviewChatClient({
           </div>
         </CardHeader>
 
-        <CardContent className="flex flex-1 flex-col gap-4 p-4">
+        <CardContent className="flex flex-1 flex-col gap-4 p-3 sm:p-4">
           <div
-            className="flex-1 space-y-3 overflow-y-auto rounded-lg bg-background p-4"
-            style={{ maxHeight: "60vh" }}
+            className="flex-1 space-y-3 overflow-y-auto rounded-xl bg-background/40 p-3 sm:p-4"
+            style={{ maxHeight: "60vh", minHeight: "300px" }}
           >
             {turns.map((turn, index) => (
               <div
                 key={`${turn.speaker}-${index}`}
-                className={`max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
+                className={`animate-slide-up max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed sm:max-w-[85%] ${
                   turn.speaker === "candidate"
-                    ? "ml-auto bg-primary text-primary-foreground"
-                    : "bg-secondary"
+                    ? "ml-auto rounded-br-md bg-primary text-primary-foreground shadow-md shadow-primary/10"
+                    : "rounded-bl-md bg-secondary/60 backdrop-blur-sm"
                 }`}
               >
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest opacity-60">
-                  {turn.speaker}
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest opacity-50">
+                  {turn.speaker === "candidate" ? "You" : "Interviewer"}
                 </p>
-                <p>{turn.text}</p>
+                <p className="whitespace-pre-wrap">{turn.text}</p>
+                {turn.questionCategory && turn.speaker === "agent" && (
+                  <Badge variant="outline" className="mt-2 text-[10px]">
+                    {turn.questionCategory}
+                  </Badge>
+                )}
               </div>
             ))}
 
             {voiceMode && (synthesis.isSpeaking || recognition.isListening) && (
-              <div className="flex items-center justify-center gap-2 py-3">
+              <div className="flex items-center justify-center gap-2 py-4">
                 {synthesis.isSpeaking && (
                   <>
-                    <Volume2 className="size-4 animate-pulse text-primary" />
+                    <Volume2 className="size-5 animate-pulse text-primary" />
                     <span className="text-xs font-medium text-primary">
                       Interviewer speaking...
                     </span>
                   </>
                 )}
                 {recognition.isListening && !synthesis.isSpeaking && (
-                  <>
-                    <span className="relative flex h-3 w-3">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-                      <span className="relative inline-flex h-3 w-3 rounded-full bg-primary" />
-                    </span>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      {[0, 1, 2, 3, 4].map((i) => (
+                        <span
+                          key={i}
+                          className="inline-block h-4 w-1 animate-pulse rounded-full bg-primary"
+                          style={{ animationDelay: `${i * 150}ms`, height: `${12 + Math.random() * 12}px` }}
+                        />
+                      ))}
+                    </div>
                     <span className="text-xs font-medium text-primary">Listening...</span>
-                  </>
+                  </div>
                 )}
               </div>
             )}
 
             {pending && !synthesis.isSpeaking && (
-              <div className="flex items-center justify-center gap-2 py-3">
-                <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
-                <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
-                <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+              <div className="flex items-center justify-center gap-1.5 py-4">
+                <div className="h-2 w-2 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.3s]" />
+                <div className="h-2 w-2 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.15s]" />
+                <div className="h-2 w-2 animate-bounce rounded-full bg-primary/60" />
               </div>
             )}
 
@@ -291,10 +301,11 @@ export function InterviewChatClient({
               {voiceMode && voiceSupported ? (
                 <Button
                   size="icon"
-                  variant={recognition.isListening ? "default" : "outline"}
+                  variant={recognition.isListening ? "glow" : "outline"}
                   onClick={toggleMic}
                   disabled={pending || synthesis.isSpeaking}
                   className={recognition.isListening ? "voice-pulse" : ""}
+                  aria-label={recognition.isListening ? "Stop listening" : "Start listening"}
                 >
                   {recognition.isListening ? (
                     <Mic className="size-4" />
@@ -307,6 +318,7 @@ export function InterviewChatClient({
                   size="icon"
                   onClick={sendTurn}
                   disabled={pending || !message.trim()}
+                  aria-label="Send message"
                 >
                   <Send className="size-4" />
                 </Button>
@@ -316,6 +328,7 @@ export function InterviewChatClient({
                 variant="ghost"
                 onClick={() => void finishInterview()}
                 disabled={pending}
+                aria-label="End interview"
               >
                 <Square className="size-4" />
               </Button>
@@ -323,51 +336,55 @@ export function InterviewChatClient({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            {voiceMode
-              ? "Speak your answer — auto-sends after a pause. Use headphones to avoid echo."
-              : "Enter to send, Shift+Enter for newline"}
+            {voiceMode ? (
+              <span className="flex items-center gap-1.5">
+                <Headphones className="size-3" />
+                Speak your answer — auto-sends after a pause. Use headphones to avoid echo.
+              </span>
+            ) : (
+              "Enter to send, Shift+Enter for newline"
+            )}
           </p>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="hidden xl:block">
         <CardHeader>
-          <CardTitle>Session info</CardTitle>
+          <CardTitle className="text-base">Session info</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Persona</span>
-            <span className="font-medium">{sessionMeta.personaName}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Type</span>
-            <span className="font-medium">{sessionMeta.interviewType}</span>
-          </div>
-          <div className="flex justify-between">
+          {[
+            { label: "Persona", value: sessionMeta.personaName },
+            { label: "Type", value: sessionMeta.interviewType },
+            { label: "Duration", value: `${sessionMeta.durationMinutes} min` },
+            { label: "Turns", value: String(turns.length) },
+          ].map((row) => (
+            <div key={row.label} className="flex justify-between gap-2">
+              <span className="text-muted-foreground">{row.label}</span>
+              <span className="font-medium">{row.value}</span>
+            </div>
+          ))}
+          <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Status</span>
             <Badge variant="secondary">{sessionMeta.status}</Badge>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Duration</span>
-            <span className="font-medium">{sessionMeta.durationMinutes} min</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Turns</span>
-            <span className="font-medium tabular-nums">{turns.length}</span>
-          </div>
+
           {voiceMode && (
-            <div className="mt-4 rounded-lg border border-border bg-secondary/40 p-3">
-              <p className="text-xs font-semibold text-primary">Voice mode active</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {recognition.isListening
-                  ? "Mic is live — speak your answer"
-                  : synthesis.isSpeaking
-                    ? "Interviewer is speaking..."
-                    : pending
-                      ? "Processing your response..."
-                      : "Voice ready"}
-              </p>
-            </div>
+            <>
+              <Separator className="my-2" />
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+                <p className="text-xs font-semibold text-primary">Voice mode active</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {recognition.isListening
+                    ? "Mic is live — speak your answer"
+                    : synthesis.isSpeaking
+                      ? "Interviewer is speaking..."
+                      : pending
+                        ? "Processing your response..."
+                        : "Voice ready"}
+                </p>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
