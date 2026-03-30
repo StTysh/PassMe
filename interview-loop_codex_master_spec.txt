@@ -1,0 +1,2155 @@
+BOOTSTRAP INSTRUCTION FOR CODEX
+Read this file from start to finish before making any code changes.
+This file is the primary implementation spec and the single source of truth for the project.
+If there is any conflict between ad-hoc assumptions and this file, follow this file.
+Before implementing, extract from this file:
+- stack and architecture
+- hard constraints
+- hardcoded product decisions
+- database schema
+- API routes
+- page routes
+- prompt architecture
+- milestone order
+- acceptance criteria
+Then implement strictly in the milestone order defined here, keeping the app runnable at every step.
+
+INTERVIEW LOOP — CODEX MASTER IMPLEMENTATION SPEC
+Version: 1.0
+Purpose: This is the single source of truth for Codex to implement the app.
+Priority: Ship a complete, demoable vertical slice fast. Prefer hardcoded product decisions over incomplete configurability.
+
+==================================================
+0. EXECUTIVE SUMMARY
+==================================================
+
+Build a production-quality local-first web app called Interview Loop.
+
+Interview Loop is an interview simulator and coaching app. It ingests the candidate’s real materials, generates a role-aware interview plan, runs a realistic text interview using configurable interviewer personas, stores all data locally in SQLite, and produces actionable coaching after each session.
+
+The app is NOT a generic chatbot and NOT a platform. It is a sharp vertical product:
+- create candidate profile
+- upload resume
+- paste job description
+- optionally add cover letter/application answers/company context
+- choose interview type/persona/difficulty/interest level/duration
+- generate plan
+- run interview
+- store transcript
+- score session
+- generate review
+- track progress
+
+Core requirement from owner:
+- Gemini integration for everything AI-related
+- local database only
+- web app
+- speed matters
+- hardcode wherever reasonable if it reduces build time without harming the demo
+
+==================================================
+1. PRODUCT PRINCIPLES
+==================================================
+
+1.1 What the product should feel like
+- specific
+- realistic
+- useful after one session
+- grounded in the user’s actual resume and target role
+- slightly demanding
+- actionable in the review phase
+
+1.2 What wins in a demo
+- upload real resume
+- paste real job description
+- choose skeptical manager persona
+- answer a few interview questions
+- show targeted critique and rewritten answers
+- show local history and score trend
+
+1.3 What to optimize
+- product completeness over over-engineering
+- clear UI over flashy UI
+- reliability over configurability
+- text mode first
+- strong post-interview feedback
+- strong local persistence
+- code that stays runnable at every milestone
+
+1.4 Hard rules
+- no platform ambitions
+- no auth
+- no hosted DB
+- no vector DB
+- no scraping of authenticated job portals in v1
+- no giant “agent framework”
+- no generic workflow builder
+- no overcomplicated voice infrastructure before text mode is done
+
+==================================================
+2. HARD CONSTRAINTS
+==================================================
+
+- Framework: Next.js latest with TypeScript and App Router
+- Styling: Tailwind CSS + shadcn/ui
+- Persistence: SQLite only
+- ORM: Drizzle ORM
+- SQLite driver: better-sqlite3
+- AI: Gemini only, through one server-side wrapper
+- Validation: Zod
+- Data fetching: TanStack Query
+- Forms: react-hook-form
+- Icons: lucide-react
+- Charts: optional lightweight chart library if needed; keep simple
+
+Must not use:
+- Postgres
+- Supabase
+- Firebase
+- Redis
+- vector database
+- hosted DB
+- background workers
+- auth systems
+- multi-user accounts
+- websocket infra except later voice mode if added
+- external RAG service
+- scraping login-protected portals
+
+==================================================
+3. V1 SCOPE
+==================================================
+
+3.1 Supported inputs
+- resume PDF upload
+- job description pasted text
+- optional cover letter pasted text
+- optional application answers pasted text
+- optional company context pasted text
+- optional company URL saved as plain text only
+
+3.2 Supported interview types (hardcoded)
+- recruiter_screen
+- hiring_manager
+- behavioral
+- technical_general
+- system_design_light
+
+3.3 Supported personas (hardcoded)
+- warm_recruiter
+- skeptical_manager
+- neutral_manager
+- detail_oriented_interviewer
+
+3.4 Supported difficulty levels (hardcoded)
+- easy
+- realistic
+- hard
+
+3.5 Supported interest levels (hardcoded)
+- low
+- medium
+- high
+
+3.6 Supported durations (hardcoded)
+- 5 minutes
+- 10 minutes
+- 15 minutes
+
+3.7 Supported modes
+- text in v1
+- voice planned in v2 behind feature flag only
+
+==================================================
+4. WHAT TO HARDCODE ON PURPOSE
+==================================================
+
+Hardcode these:
+- initial personas
+- interview types
+- rubric dimensions and weights
+- score bands and labels
+- review categories
+- question pacing logic
+- follow-up caps
+- session durations
+- page routes
+- UI copy where practical
+- prompt templates
+- initial chunk sizes
+- retrieval top-k
+- demo seed data
+- one DB file path convention
+- feature flags
+- settings defaults
+- default theme and layout
+- supported file types
+- “interest level” behavior mapping
+- score interpretation thresholds
+- retry once behavior for structured outputs
+
+Do NOT hardcode:
+- parsed resume content
+- extracted job requirements
+- actual interview questions
+- follow-up wording
+- session evaluation text
+- coaching text
+- transcript content
+
+==================================================
+5. NON-GOALS
+==================================================
+
+Do not build in v1:
+- user auth
+- cloud sync
+- organization workspaces
+- collaboration
+- note sharing
+- browser extension
+- Greenhouse/Lever scraping
+- dynamic custom persona builder UI
+- payment
+- admin panel
+- full voice product
+- avatar/video interviewer
+- arbitrary tool/plugin marketplace
+- generic prompt builder
+- ATS optimization feature
+- email flows
+- calendar integrations
+
+==================================================
+6. USER FLOWS
+==================================================
+
+6.1 Happy path
+1. User opens app
+2. Creates candidate profile
+3. Uploads resume PDF
+4. App extracts text and parses resume with Gemini into normalized JSON
+5. User pastes job description
+6. App analyzes job with Gemini into structured requirements
+7. User optionally adds cover letter/application answers/company context
+8. User selects interview type + persona + difficulty + interest level + duration
+9. App generates interview plan with Gemini
+10. User starts interview
+11. App asks one question at a time
+12. User answers via text
+13. App probes weak/vague answers
+14. App stores transcript locally turn by turn
+15. User finishes or session times out logically
+16. App evaluates transcript with Gemini
+17. App generates structured coaching with Gemini
+18. Review page shows score breakdown, strengths, weaknesses, missed points, rewritten answers, next steps
+19. Session is visible in History page
+20. User can retry with same configuration
+
+6.2 Demo mode flow
+- Click “Try Demo”
+- load seeded candidate + seeded resume + seeded job description
+- land on interview setup page with defaults preselected
+- start interview quickly
+
+==================================================
+7. TECH STACK
+==================================================
+
+Frontend:
+- Next.js latest
+- React
+- TypeScript
+- App Router
+- Tailwind CSS
+- shadcn/ui
+- TanStack Query
+- react-hook-form
+- zod
+
+Backend:
+- Next.js route handlers only
+- no separate Express/Fastify server
+
+Database:
+- SQLite local file
+- better-sqlite3
+- Drizzle ORM
+- Drizzle migrations
+- SQLite FTS5 virtual tables for search
+
+AI:
+- @google/genai official SDK
+- all model access server-side only
+- structured outputs for parsing, planning, scoring, coaching
+- standard text generation for live interview turns
+- optional Live API in v2 only
+
+Utilities:
+- nanoid or crypto.randomUUID for IDs
+- date-fns for formatting if needed
+- pdf text extraction library (pdf-parse or equivalent; choose stable library)
+- clsx / tailwind-merge helpers
+
+==================================================
+8. FILE/FOLDER STRUCTURE
+==================================================
+
+interview-loop/
+  README.md
+  package.json
+  tsconfig.json
+  next.config.ts
+  postcss.config.js
+  tailwind.config.ts
+  components.json
+  .env.example
+  drizzle.config.ts
+  public/
+    demo/
+      sample-resume.pdf
+  scripts/
+    seed.ts
+    dev-reset.ts
+  src/
+    app/
+      layout.tsx
+      page.tsx
+      globals.css
+      profiles/
+        page.tsx
+        new/
+          page.tsx
+        [profileId]/
+          page.tsx
+          edit/
+            page.tsx
+      interviews/
+        new/
+          page.tsx
+        [sessionId]/
+          page.tsx
+          review/
+            page.tsx
+      history/
+        page.tsx
+      settings/
+        page.tsx
+      api/
+        profiles/
+          route.ts
+        profiles/[profileId]/
+          route.ts
+        documents/upload/
+          route.ts
+        documents/parse/
+          route.ts
+        interviews/plan/
+          route.ts
+        interviews/start/
+          route.ts
+        interviews/[sessionId]/next-turn/
+          route.ts
+        interviews/[sessionId]/finish/
+          route.ts
+        interviews/[sessionId]/review/
+          route.ts
+        history/
+          route.ts
+        search/
+          route.ts
+    components/
+      app-shell.tsx
+      nav-sidebar.tsx
+      header.tsx
+      empty-state.tsx
+      loading-state.tsx
+      error-alert.tsx
+      upload/
+        resume-upload.tsx
+        document-list.tsx
+      profiles/
+        profile-form.tsx
+        profile-summary.tsx
+        parsed-resume-card.tsx
+      interviews/
+        interview-setup-form.tsx
+        interview-chat.tsx
+        transcript-panel.tsx
+        timer.tsx
+        persona-card.tsx
+        session-summary.tsx
+      review/
+        score-card.tsx
+        dimension-score-grid.tsx
+        strengths-list.tsx
+        weaknesses-list.tsx
+        missed-points-list.tsx
+        rewritten-answer-card.tsx
+        next-steps-list.tsx
+      history/
+        session-history-list.tsx
+        score-trend-card.tsx
+      ui/
+        ...
+    db/
+      client.ts
+      pragmas.ts
+      schema.ts
+      migrations/
+    lib/
+      env.ts
+      constants.ts
+      utils.ts
+      ids.ts
+      personas/
+        defaults.ts
+      scoring/
+        rubric.ts
+        normalize.ts
+      chunking/
+        text.ts
+      retrieval/
+        fts.ts
+        context.ts
+      prompts/
+        parseResume.ts
+        analyzeJob.ts
+        buildPlan.ts
+        liveInterviewer.ts
+        evaluateSession.ts
+        coachSession.ts
+      gemini/
+        client.ts
+        models.ts
+        structured.ts
+        text.ts
+        live.ts
+      parser/
+        pdf.ts
+        documents.ts
+      services/
+        profiles.ts
+        documents.ts
+        interviews.ts
+        evaluation.ts
+        history.ts
+      repositories/
+        profilesRepo.ts
+        documentsRepo.ts
+        personasRepo.ts
+        interviewsRepo.ts
+        transcriptRepo.ts
+        scoresRepo.ts
+        settingsRepo.ts
+      validation/
+        profile.ts
+        interview.ts
+        documents.ts
+        score.ts
+        api.ts
+      types/
+        domain.ts
+        api.ts
+    tests/
+      unit/
+      integration/
+
+==================================================
+9. DATABASE DESIGN
+==================================================
+
+Use SQLite local file only.
+
+9.1 Connection / PRAGMAs
+Run at DB startup:
+- PRAGMA journal_mode = WAL;
+- PRAGMA foreign_keys = ON;
+- PRAGMA synchronous = NORMAL;
+- PRAGMA temp_store = MEMORY;
+- PRAGMA busy_timeout = 5000;
+
+9.2 Tables
+
+candidate_profiles
+- id TEXT PRIMARY KEY
+- full_name TEXT NOT NULL
+- headline TEXT
+- email TEXT
+- years_experience INTEGER
+- target_roles_json TEXT NOT NULL DEFAULT '[]'
+- primary_domain TEXT
+- notes TEXT
+- created_at INTEGER NOT NULL
+- updated_at INTEGER NOT NULL
+
+documents
+- id TEXT PRIMARY KEY
+- candidate_profile_id TEXT NOT NULL REFERENCES candidate_profiles(id) ON DELETE CASCADE
+- type TEXT NOT NULL
+- title TEXT
+- source_filename TEXT
+- mime_type TEXT
+- raw_text TEXT NOT NULL
+- parsed_json TEXT
+- created_at INTEGER NOT NULL
+- updated_at INTEGER NOT NULL
+
+document_chunks
+- id TEXT PRIMARY KEY
+- document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE
+- chunk_index INTEGER NOT NULL
+- text TEXT NOT NULL
+- token_estimate INTEGER
+- metadata_json TEXT
+- created_at INTEGER NOT NULL
+
+interview_personas
+- id TEXT PRIMARY KEY
+- key TEXT NOT NULL UNIQUE
+- name TEXT NOT NULL
+- description TEXT NOT NULL
+- config_json TEXT NOT NULL
+- created_at INTEGER NOT NULL
+- updated_at INTEGER NOT NULL
+
+interview_sessions
+- id TEXT PRIMARY KEY
+- candidate_profile_id TEXT NOT NULL REFERENCES candidate_profiles(id) ON DELETE CASCADE
+- persona_id TEXT NOT NULL REFERENCES interview_personas(id)
+- interview_type TEXT NOT NULL
+- difficulty TEXT NOT NULL
+- interest_level TEXT NOT NULL
+- mode TEXT NOT NULL
+- duration_minutes INTEGER NOT NULL
+- status TEXT NOT NULL
+- job_document_id TEXT REFERENCES documents(id)
+- plan_json TEXT
+- started_at INTEGER
+- completed_at INTEGER
+- created_at INTEGER NOT NULL
+- updated_at INTEGER NOT NULL
+
+transcript_turns
+- id TEXT PRIMARY KEY
+- interview_session_id TEXT NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE
+- turn_index INTEGER NOT NULL
+- speaker TEXT NOT NULL
+- text TEXT NOT NULL
+- question_category TEXT
+- metadata_json TEXT
+- created_at INTEGER NOT NULL
+
+scores
+- id TEXT PRIMARY KEY
+- interview_session_id TEXT NOT NULL UNIQUE REFERENCES interview_sessions(id) ON DELETE CASCADE
+- overall_score REAL NOT NULL
+- clarity_score REAL NOT NULL
+- relevance_score REAL NOT NULL
+- evidence_score REAL NOT NULL
+- structure_score REAL NOT NULL
+- role_fit_score REAL NOT NULL
+- confidence_score REAL NOT NULL
+- band TEXT NOT NULL
+- summary TEXT NOT NULL
+- created_at INTEGER NOT NULL
+
+feedback_items
+- id TEXT PRIMARY KEY
+- interview_session_id TEXT NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE
+- category TEXT NOT NULL
+- title TEXT NOT NULL
+- body TEXT NOT NULL
+- severity TEXT
+- source_turn_ids_json TEXT
+- created_at INTEGER NOT NULL
+
+app_settings
+- id TEXT PRIMARY KEY
+- key TEXT NOT NULL UNIQUE
+- value_json TEXT NOT NULL
+- updated_at INTEGER NOT NULL
+
+9.3 FTS tables
+Create FTS5 virtual tables for:
+- documents_fts
+- document_chunks_fts
+- transcript_turns_fts
+
+Suggested design:
+- contentless or external content acceptable; choose whichever is simplest to maintain
+- keep it easy to update
+- create helper functions that sync FTS after insert/update
+
+9.4 Indexes
+Add practical indexes:
+- documents(candidate_profile_id, type)
+- interview_sessions(candidate_profile_id, created_at DESC)
+- transcript_turns(interview_session_id, turn_index)
+- feedback_items(interview_session_id, category)
+- scores(interview_session_id)
+
+==================================================
+10. DOMAIN TYPES
+==================================================
+
+Create shared TypeScript types in src/lib/types/domain.ts.
+
+10.1 Core enums
+- InterviewType = recruiter_screen | hiring_manager | behavioral | technical_general | system_design_light
+- Difficulty = easy | realistic | hard
+- InterestLevel = low | medium | high
+- SessionMode = text | voice
+- DocumentType = resume | job_description | cover_letter | application_answer | company_context
+- SessionStatus = planned | active | completed | cancelled
+- Speaker = agent | candidate | system
+
+10.2 ResumeProfile
+{
+  professionalSummary: string;
+  roles: Array<{
+    company: string;
+    title: string;
+    startDate?: string;
+    endDate?: string;
+    achievements: string[];
+    responsibilities: string[];
+    skillsUsed: string[];
+  }>;
+  skills: string[];
+  education: string[];
+  metrics: string[];
+  leadershipSignals: string[];
+  domainKeywords: string[];
+  uncertainFields?: string[];
+}
+
+10.3 JobAnalysis
+{
+  titleGuess: string;
+  seniority: string;
+  coreCompetencies: string[];
+  mustHaveSkills: string[];
+  niceToHaveSkills: string[];
+  likelyInterviewThemes: string[];
+  hiddenSignals: string[];
+  likelyConcerns: string[];
+}
+
+10.4 InterviewPlan
+{
+  sessionObjective: string;
+  competencySequence: string[];
+  starterQuestions: Array<{
+    id: string;
+    category: string;
+    question: string;
+    whyItMatters: string;
+  }>;
+  followUpRules: string[];
+  likelyGapTargets: string[];
+  likelyStrengthTargets: string[];
+}
+
+10.5 Evaluation payload
+{
+  overallScore: number;
+  dimensionScores: {
+    clarity: number;
+    relevance: number;
+    evidence: number;
+    structure: number;
+    roleFit: number;
+    confidence: number;
+  };
+  summary: string;
+  strengths: Array<{ title: string; body: string; sourceTurnIndexes?: number[] }>;
+  weaknesses: Array<{ title: string; body: string; severity: 'low' | 'medium' | 'high'; sourceTurnIndexes?: number[] }>;
+  missedPoints: Array<{ title: string; body: string }>;
+  weakAnswerTargets: Array<{
+    turnIndex: number;
+    originalAnswerExcerpt: string;
+    whyWeak: string;
+  }>;
+}
+
+10.6 Coaching payload
+{
+  rewrittenAnswers: Array<{
+    originalTurnIndex: number;
+    title: string;
+    improvedAnswer: string;
+    rationale: string;
+  }>;
+  nextSteps: Array<{
+    title: string;
+    body: string;
+  }>;
+  drills: Array<{
+    title: string;
+    prompt: string;
+  }>;
+}
+
+==================================================
+11. PERSONA SYSTEM (HARDCODED)
+==================================================
+
+Implement in src/lib/personas/defaults.ts and seed DB from it.
+
+11.1 Persona shape
+{
+  key: PersonaKey;
+  name: string;
+  description: string;
+  tone: string;
+  warmth: number; // 0-100
+  skepticism: number; // 0-100
+  interruptionFrequency: number; // 0-100
+  followUpIntensity: number; // 0-100
+  challengeStyle: 'soft' | 'balanced' | 'sharp';
+  focusAreas: string[];
+  openingStyle: string;
+  closingStyle: string;
+}
+
+11.2 Seeded personas
+
+warm_recruiter
+- name: Warm Recruiter
+- description: Friendly first-round interviewer focused on fit, motivation, and communication.
+- tone: encouraging, polished, conversational
+- warmth: 85
+- skepticism: 25
+- interruptionFrequency: 10
+- followUpIntensity: 40
+- challengeStyle: soft
+- focusAreas: motivation, clarity, fit, communication
+- openingStyle: friendly and relaxed
+- closingStyle: supportive and appreciative
+
+skeptical_manager
+- name: Skeptical Hiring Manager
+- description: Demanding interviewer who wants proof, ownership, and measurable impact.
+- tone: direct, sharp, concise
+- warmth: 35
+- skepticism: 85
+- interruptionFrequency: 35
+- followUpIntensity: 80
+- challengeStyle: sharp
+- focusAreas: ownership, evidence, tradeoffs, impact
+- openingStyle: brief and formal
+- closingStyle: minimal and neutral
+
+neutral_manager
+- name: Neutral Hiring Manager
+- description: Balanced manager assessing fit, execution, and communication.
+- tone: calm, professional, neutral
+- warmth: 55
+- skepticism: 55
+- interruptionFrequency: 20
+- followUpIntensity: 60
+- challengeStyle: balanced
+- focusAreas: ownership, collaboration, prioritization, outcomes
+- openingStyle: professional and neutral
+- closingStyle: concise and courteous
+
+detail_oriented_interviewer
+- name: Detail-Oriented Interviewer
+- description: Interviewer who drills into process, edge cases, and technical detail.
+- tone: analytical, precise
+- warmth: 45
+- skepticism: 70
+- interruptionFrequency: 15
+- followUpIntensity: 90
+- challengeStyle: balanced
+- focusAreas: detail, process, metrics, technical depth
+- openingStyle: focused and efficient
+- closingStyle: brief and matter-of-fact
+
+11.3 Interest level mapping
+interestLevel = low | medium | high
+
+Mapping rules:
+- low: decrease warmth by 15, increase skepticism by 10, reduce patience, less rescue/helping
+- medium: unchanged
+- high: increase warmth by 10, reduce skepticism by 5, more patience, more second chances
+
+Clamp values between 0 and 100.
+
+==================================================
+12. DIFFICULTY SYSTEM (HARDCODED)
+==================================================
+
+easy
+- simpler questions
+- more patience
+- fewer interruptions
+- more forgiving follow-ups
+- accepts moderately complete answers sooner
+
+realistic
+- balanced probing
+- normal professional expectations
+- moderate challenge
+
+hard
+- stricter evidence expectations
+- sharper probing
+- less patience for vague answers
+- more direct challenge
+- escalates weak answers faster
+
+Difficulty affects:
+- interviewer phrasing
+- follow-up threshold
+- evidence expectations
+- pace pressure
+- number of challenges on unsupported claims
+
+==================================================
+13. SESSION PACING RULES
+==================================================
+
+Hardcode:
+- 5 min session => max 4 main questions
+- 10 min session => max 6 main questions
+- 15 min session => max 8 main questions
+
+Follow-up caps:
+- max 2 follow-ups per main question
+- if answer is vague/incomplete/unsupported => follow-up
+- if answer is sufficient => move on
+
+Hard end conditions:
+- max main question budget reached
+- less than or equal to 90 seconds remaining
+- user explicitly clicks end session
+- user sends two consecutive empty/near-empty answers
+
+Suggested answer length heuristic:
+- short answer threshold = under 180 characters
+- adequate answer threshold = over 300 characters
+- but do not rely on length only; combine with model reasoning
+
+==================================================
+14. RUBRIC (HARDCODED)
+==================================================
+
+Rubric dimensions:
+- clarity
+- relevance
+- evidence
+- structure
+- role_fit
+- confidence
+
+Weights:
+- clarity: 0.18
+- relevance: 0.22
+- evidence: 0.20
+- structure: 0.14
+- role_fit: 0.18
+- confidence: 0.08
+
+Overall formula:
+overall =
+  clarity * 0.18 +
+  relevance * 0.22 +
+  evidence * 0.20 +
+  structure * 0.14 +
+  roleFit * 0.18 +
+  confidence * 0.08
+
+Score bands:
+- 90-100 => excellent
+- 75-89 => strong
+- 60-74 => workable
+- 45-59 => weak
+- 0-44 => poor
+
+Weakness trigger rules:
+- evidence < 60 => needs more concrete proof
+- structure < 60 => answer lacks clear narrative
+- role_fit < 60 => does not map enough to target role
+- relevance < 60 => drifts from actual question
+- clarity < 60 => too abstract or too verbose
+- confidence < 60 => delivery is under-assertive or hesitant
+
+==================================================
+15. REVIEW CATEGORIES (HARDCODED)
+==================================================
+
+Always produce:
+- overall score
+- dimension scores
+- summary
+- strengths
+- weaknesses
+- missed_points
+- rewritten_answers
+- next_steps
+
+Rules:
+- strengths: at least 2 if possible
+- weaknesses: at least 2 if possible
+- missed_points: 2 to 5
+- rewritten_answers: maximum 3
+- next_steps: 3 to 5
+
+Selection for rewritten answers:
+- choose the 3 weakest answer moments by severity
+- prioritize low evidence + low role fit + low structure answers
+
+==================================================
+16. GEMINI INTEGRATION STRATEGY
+==================================================
+
+All AI access must go through one server-side abstraction layer.
+
+16.1 Environment variables
+GEMINI_API_KEY=
+GEMINI_FAST_MODEL=
+GEMINI_EVAL_MODEL=
+GEMINI_LIVE_MODEL=
+DATABASE_FILE=./local/interview-loop.sqlite
+APP_ENV=development
+ENABLE_VOICE=false
+
+Suggested defaults can be placed in .env.example, but exact model names should be overridable and not frozen in code.
+
+16.2 SDK usage
+Use official Google GenAI SDK.
+
+16.3 Module responsibilities
+
+gemini/client.ts
+- initialize SDK
+- export client singleton
+- validate API key presence
+
+gemini/models.ts
+- centralize env-based model names
+- export getters:
+  - getFastModel()
+  - getEvalModel()
+  - getLiveModel()
+
+gemini/structured.ts
+- helper to call Gemini with schema-constrained response
+- validates output with zod
+- retries once on invalid schema
+- logs validation failure
+
+gemini/text.ts
+- helper for normal text generation
+- used for interviewer turns
+
+gemini/live.ts
+- placeholder / feature-flagged voice integration only
+- do not block v1
+
+16.4 Recommended AI module mapping
+
+Resume parsing => structured output
+Job analysis => structured output
+Interview planning => structured output
+Live interviewer => standard text generation
+Session evaluation => structured output
+Coaching => structured output
+
+16.5 Files handling
+For v1:
+- extract PDF text locally first
+- send extracted text to Gemini
+- optionally keep file-upload path ready for future higher-fidelity parsing
+
+==================================================
+17. PROMPT ARCHITECTURE
+==================================================
+
+Prompts must be stored in separate files under src/lib/prompts.
+Do NOT inline prompt strings inside route handlers.
+
+17.1 parseResume.ts
+Goal:
+- parse resume into normalized structured JSON
+Rules:
+- never invent employers, dates, metrics, skills, or roles
+- preserve factuality
+- if unclear, add to uncertainFields
+- output valid JSON only
+
+Suggested prompt content:
+SYSTEM:
+You are a resume parsing engine. Extract structured candidate data from the provided resume text.
+Do not infer facts that are not strongly supported.
+Return only valid JSON matching the schema.
+If dates, company names, or metrics are ambiguous, preserve what is certain and list uncertain fields.
+
+USER INPUT:
+- raw resume text
+- maybe filename
+- maybe document title
+
+17.2 analyzeJob.ts
+Goal:
+- extract structured role requirements
+Rules:
+- infer title if necessary
+- identify core competencies
+- identify likely interviewer concerns
+- identify hidden expectations
+- output valid JSON only
+
+Suggested prompt content:
+SYSTEM:
+You are a hiring signal extraction engine. Analyze the job description and extract the actual skills, competencies, expectations, and likely interview themes.
+Return valid JSON only.
+
+17.3 buildPlan.ts
+Goal:
+- produce interview plan aligned to role, persona, difficulty, duration
+Rules:
+- keep it realistic
+- keep it within duration
+- target candidate strengths/gaps
+- output valid JSON only
+
+Hardcoded heuristics by interview type:
+recruiter_screen:
+- motivation
+- concise background summary
+- fit
+- logistics/interest
+- red flags
+
+hiring_manager:
+- ownership
+- outcomes
+- tradeoffs
+- prioritization
+- collaboration
+- strategy/decision-making
+
+behavioral:
+- STAR-oriented
+- conflict
+- failure
+- influence
+- ambiguity
+- leadership
+
+technical_general:
+- problem-solving
+- implementation detail
+- architecture basics
+- debugging / tradeoffs
+
+system_design_light:
+- requirements
+- approach
+- tradeoffs
+- bottlenecks
+- reliability / observability
+
+17.4 liveInterviewer.ts
+This is the most important prompt.
+
+Rules:
+- stay in persona
+- ask one question at a time
+- do not leak scoring rubric
+- do not coach during the interview
+- keep responses concise
+- probe weak answers
+- move on when answer is sufficient
+- maintain consistent tone
+- avoid long paragraphs
+- do not output markdown bullet lists
+- do not output JSON to user
+
+Prompt should receive:
+- persona config
+- interest level
+- difficulty
+- interview type
+- session objective
+- current question count
+- follow-up count for current topic
+- last transcript turns
+- retrieved context snippets
+- time remaining
+
+Output should ideally be structured internally for the app but natural for UI.
+Recommended internal response schema:
+{
+  "agentMessage": string,
+  "questionCategory": string,
+  "shouldFollowUp": boolean,
+  "shouldEnd": boolean,
+  "reasoningTag": "new_question" | "follow_up" | "closing"
+}
+Even if the final user-facing text is plain, use schema internally for reliability.
+
+17.5 evaluateSession.ts
+Goal:
+- grade transcript
+- identify strengths/weaknesses
+- cite evidence via turn indexes
+Rules:
+- act as evaluator, not interviewer
+- score all dimensions 0-100
+- tie judgments to evidence
+- avoid empty generic praise
+- output valid JSON only
+
+17.6 coachSession.ts
+Goal:
+- turn critique into practice-ready rewrites and drills
+Rules:
+- generate concrete better answers
+- explain why the rewrite is better
+- produce next-step practice drills
+- output valid JSON only
+
+==================================================
+18. DOCUMENT PARSING / CHUNKING / RETRIEVAL
+==================================================
+
+18.1 PDF parsing
+Use local extraction first.
+Store:
+- original filename
+- MIME type
+- extracted raw text
+
+If extraction fails, fail gracefully with user-facing retry guidance.
+
+18.2 Chunking rules
+Hardcode:
+- target chunk size: 700 to 1000 chars
+- overlap: 120 chars
+- split on headings and blank lines first
+- fallback to sentence boundaries
+- final fallback to hard slice
+
+Store chunk metadata:
+{
+  sectionLabel?: string;
+  sourceFilename?: string;
+  documentType: string;
+  chunkIndex: number;
+}
+
+18.3 Retrieval use cases
+During interview generation retrieve:
+- top 2 relevant resume chunks
+- top 2 job chunks
+- last 4 transcript turns
+- optional 1-2 prior weak-answer snippets from history if available
+
+During scoring retrieve:
+- full transcript
+- job requirement snippets
+- role evidence snippets from resume
+- optional history context
+
+18.4 Retrieval strategy
+Do NOT use vector search.
+Use:
+1. keyword extraction from current question/answer
+2. FTS query
+3. type-based score boost
+4. top-k select
+5. trim to character budget
+
+18.5 Search priorities
+For live interviewer next turn:
+priority order:
+1. recent transcript context
+2. relevant job requirement chunks
+3. relevant resume chunks
+4. relevant prior weaknesses if any
+
+==================================================
+19. INTERVIEW ENGINE STATE MACHINE
+==================================================
+
+Implement deterministic state machine.
+
+States:
+- planned
+- active_opening
+- active_main
+- active_followup
+- closing
+- completed
+
+Transitions:
+planned -> active_opening on start
+active_opening -> active_main after first question
+active_main -> active_followup if answer requires probing
+active_followup -> active_main when resolved or cap hit
+active_main -> closing when main question budget hit or time low
+closing -> completed after final interviewer closing message
+
+What to store in session-local metadata (either in session plan_json or runtime metadata_json):
+- mainQuestionCount
+- currentQuestionCategory
+- followUpsForCurrentQuestion
+- currentState
+- timeRemainingEstimate
+- askedQuestionIds
+- latestAssessmentHints
+
+==================================================
+20. API CONTRACTS
+==================================================
+
+All route handlers must:
+- validate input with zod
+- return typed JSON
+- return consistent error shape
+
+Recommended error shape:
+{
+  "ok": false,
+  "error": {
+    "code": "VALIDATION_ERROR" | "NOT_FOUND" | "AI_ERROR" | "DB_ERROR" | "PARSE_ERROR",
+    "message": "Human readable message"
+  }
+}
+
+20.1 POST /api/profiles
+Request:
+{
+  "fullName": "Jane Doe",
+  "headline": "Senior Product Manager",
+  "email": "jane@example.com",
+  "yearsExperience": 7,
+  "targetRoles": ["Senior PM", "Group PM"],
+  "primaryDomain": "B2B SaaS",
+  "notes": "Interested in AI platform roles"
+}
+Response:
+{
+  "ok": true,
+  "profileId": "prof_123"
+}
+
+20.2 GET /api/profiles/[profileId]
+Response:
+{
+  "ok": true,
+  "profile": { ... },
+  "documents": [ ... ],
+  "latestSessions": [ ... ]
+}
+
+20.3 PATCH /api/profiles/[profileId]
+Request:
+same fields as create, partial allowed
+
+20.4 POST /api/documents/upload
+multipart form data:
+- profileId
+- type
+- file OR text field
+
+Use this route for both upload and plain-text docs if simpler, or create a separate text-create route if necessary.
+If using single route:
+- when file exists, parse file
+- when text exists, store text directly
+
+Response:
+{
+  "ok": true,
+  "documentId": "doc_123",
+  "type": "resume",
+  "title": "resume.pdf"
+}
+
+20.5 POST /api/documents/parse
+Request:
+{
+  "documentId": "doc_123",
+  "parseMode": "resume" | "job_description"
+}
+Response:
+{
+  "ok": true,
+  "documentId": "doc_123",
+  "parsed": { ... }
+}
+
+20.6 POST /api/interviews/plan
+Request:
+{
+  "candidateProfileId": "prof_123",
+  "jobDocumentId": "doc_job_123",
+  "personaKey": "skeptical_manager",
+  "interviewType": "hiring_manager",
+  "difficulty": "realistic",
+  "interestLevel": "medium",
+  "durationMinutes": 10
+}
+Response:
+{
+  "ok": true,
+  "sessionId": "sess_123",
+  "plan": { ...InterviewPlan }
+}
+
+20.7 POST /api/interviews/start
+Request:
+{
+  "sessionId": "sess_123"
+}
+Response:
+{
+  "ok": true,
+  "firstMessage": "Thanks for joining. Let’s start with a quick overview of your background.",
+  "session": { ... }
+}
+
+20.8 POST /api/interviews/[sessionId]/next-turn
+Request:
+{
+  "candidateMessage": "I led the rollout of..."
+}
+Response:
+{
+  "ok": true,
+  "agentMessage": "What specific metric improved, and how did you measure it?",
+  "questionCategory": "impact",
+  "shouldEnd": false
+}
+
+20.9 POST /api/interviews/[sessionId]/finish
+Request:
+{
+  "force": false
+}
+Response:
+{
+  "ok": true,
+  "reviewReady": true
+}
+
+20.10 GET /api/interviews/[sessionId]/review
+Response:
+{
+  "ok": true,
+  "scores": { ... },
+  "feedback": {
+    "strengths": [],
+    "weaknesses": [],
+    "missedPoints": [],
+    "rewrittenAnswers": [],
+    "nextSteps": []
+  }
+}
+
+20.11 GET /api/history
+Query params optional:
+- profileId
+- interviewType
+- personaKey
+Response:
+{
+  "ok": true,
+  "sessions": [ ... ],
+  "summary": { ... }
+}
+
+20.12 GET /api/search
+Optional utility endpoint for searching local documents/transcripts.
+Query:
+- q
+- profileId?
+- scope? documents|transcripts|all
+Response:
+{
+  "ok": true,
+  "results": [ ... ]
+}
+
+==================================================
+21. REPOSITORY / SERVICE SEPARATION
+==================================================
+
+Keep this strict.
+
+Repositories:
+- DB-only logic
+- CRUD and query methods
+- no Gemini calls
+
+Services:
+- orchestration
+- validation composition
+- prompt selection
+- repository coordination
+- Gemini calls
+
+Suggested repository methods:
+
+profilesRepo
+- createProfile
+- getProfileById
+- updateProfile
+- listProfiles
+
+documentsRepo
+- createDocument
+- updateParsedDocument
+- listDocumentsForProfile
+- getDocumentById
+- insertChunks
+- searchChunks
+
+personasRepo
+- seedDefaultPersonas
+- getPersonaByKey
+- listPersonas
+
+interviewsRepo
+- createSession
+- getSessionById
+- updateSessionPlan
+- markSessionStarted
+- markSessionCompleted
+- listSessions
+- listSessionsForProfile
+
+transcriptRepo
+- appendTurn
+- listTurnsForSession
+- getLastTurns
+- searchTranscript
+
+scoresRepo
+- createScore
+- listFeedbackItems
+- createFeedbackItems
+- getScoreForSession
+
+settingsRepo
+- getSetting
+- upsertSetting
+
+Suggested service methods:
+
+profilesService
+- createCandidateProfile
+- updateCandidateProfile
+- getCandidateWorkspace
+
+documentsService
+- storeUploadedDocument
+- parseResumeDocument
+- parseJobDocument
+- chunkDocument
+
+interviewsService
+- generateInterviewPlan
+- startInterview
+- nextTurn
+- finishInterview
+
+evaluationService
+- evaluateCompletedSession
+- persistReview
+
+historyService
+- getHistorySummary
+- compareAgainstPrevious
+
+==================================================
+22. UI / UX RULES
+==================================================
+
+22.1 Layout
+Use a clean dashboard layout:
+- left navigation or simple top navigation
+- content centered
+- roomy cards
+- simple typography
+- avoid clutter
+
+22.2 Pages
+
+Landing (/)
+- product title
+- short subheading
+- CTA: Create profile
+- CTA: Try demo
+- recent sessions if any
+
+Profiles list (/profiles)
+- list existing profiles
+- create new profile CTA
+
+Profile new (/profiles/new)
+- form with validation
+- after save redirect to profile page
+
+Profile detail (/profiles/[id])
+- profile summary
+- parsed resume highlights
+- docs list
+- start interview CTA
+
+Interview setup (/interviews/new)
+- select profile
+- select job description doc
+- select interview type
+- select persona
+- select difficulty
+- select interest level
+- select duration
+- generate plan CTA
+
+Interview chat (/interviews/[id])
+Top area:
+- persona name
+- interview type
+- timer
+- status badge
+- end session button
+
+Main area:
+- transcript/chat panel
+- answer input
+- loading indicator
+- small session summary sidebar or top accordion
+
+Review page (/interviews/[id]/review)
+- overall score card
+- dimension grid
+- strengths
+- weaknesses
+- missed points
+- rewritten answers
+- next steps
+- retry same setup button
+
+History (/history)
+- session list
+- filter controls
+- score trend mini-chart or simple stat cards
+- open review links
+
+Settings (/settings)
+- DB path display
+- Gemini env status indicators (key present / not present)
+- reset demo data
+- app version
+
+22.3 Interaction rules
+- Enter sends
+- Shift+Enter adds newline
+- auto-focus input after interviewer responds
+- disable input while pending
+- optimistic append candidate message before response
+- always store candidate turn before requesting model response
+- show inline retry if next-turn API fails
+- preserve transcript scroll
+
+==================================================
+23. VALIDATION
+==================================================
+
+Use zod everywhere.
+
+23.1 Validate:
+- all API requests
+- all API responses from internal service layer where practical
+- all Gemini structured outputs
+- all form submissions
+
+23.2 Resume parse schema
+Strict schema with optional uncertainFields.
+
+23.3 Job analysis schema
+Strict schema.
+
+23.4 Interview plan schema
+Strict schema.
+
+23.5 Evaluation schema
+Strict schema.
+
+23.6 Coaching schema
+Strict schema.
+
+Retry policy for structured outputs:
+- attempt once
+- if invalid schema, retry once with stronger instruction
+- if still invalid, fail gracefully and log parse details
+
+==================================================
+24. ERROR HANDLING
+==================================================
+
+User-facing errors to handle:
+- missing Gemini API key
+- invalid PDF
+- empty extracted resume text
+- empty job description
+- persona not found
+- session not found
+- review before completion
+- AI schema validation failure
+- DB unavailable
+- upload parse failure
+
+Behavior:
+- return structured error JSON
+- show readable message in UI
+- preserve partial data
+- allow retry for parse and next-turn
+- do not crash page
+
+==================================================
+25. HISTORY / PROGRESS LOGIC
+==================================================
+
+History page should show:
+- session date
+- profile name
+- interview type
+- persona
+- difficulty
+- overall score
+- delta from previous comparable session if possible
+
+Comparison rule:
+- compare against previous completed session with same interview type
+- if none, compare against previous completed session overall
+- if none, no delta
+
+Biggest improvement area:
+- identify dimension with largest positive delta
+
+==================================================
+26. DEMO MODE
+==================================================
+
+Required for hackathon usability.
+
+Seed:
+- one profile: “Alex Morgan”
+- one resume focused on PM / AI products
+- one job description for “Senior Product Manager, AI Platform”
+- one sample past session with review
+- one “Try Demo” landing CTA
+
+Demo should work even if live upload is skipped.
+
+==================================================
+27. TEST PLAN
+==================================================
+
+27.1 Unit tests
+- scoring formula
+- score band mapping
+- difficulty mapping
+- interest level mapping
+- chunking
+- retrieval type boosts
+- state transitions
+- question budget logic
+
+27.2 Integration tests
+- create profile
+- upload/store document
+- parse resume
+- parse JD
+- create plan
+- start interview
+- next turn
+- finish interview
+- fetch review
+- history fetch
+
+27.3 Fixtures
+- one sample resume text
+- one sample job description text
+- one sample transcript
+- one sample evaluation payload
+
+Do not snapshot exact prose from model.
+Validate:
+- structure
+- required fields
+- ranges
+- non-empty arrays where applicable
+
+==================================================
+28. CODING STANDARDS
+==================================================
+
+- strong typing end to end
+- avoid any
+- small modules
+- repositories must not call Gemini
+- prompts must not live inside route handlers
+- route handlers must be thin
+- services must own orchestration
+- use consistent naming
+- no dead code
+- no placeholder TODO pages left in final app
+- keep linter/typecheck clean
+- keep app runnable after each milestone
+
+==================================================
+29. IMPLEMENTATION ORDER
+==================================================
+
+Milestone 1 — project scaffold
+Ship:
+- Next.js app
+- Tailwind/shadcn
+- env validation
+- base layout
+- placeholder nav
+Done when:
+- app boots locally
+- lint/typecheck pass
+
+Milestone 2 — DB foundation
+Ship:
+- SQLite connection
+- PRAGMAs
+- Drizzle config
+- schema
+- migrations
+- repositories skeleton
+Done when:
+- DB initializes
+- migrations run
+- personas seed works
+
+Milestone 3 — profile flow
+Ship:
+- create profile page
+- profiles list
+- profile detail page
+- profile edit page
+Done when:
+- profile CRUD works end to end
+
+Milestone 4 — document flow
+Ship:
+- upload/stored text docs
+- PDF text extraction
+- docs list
+- raw storage
+- chunking
+- FTS sync
+Done when:
+- resume and JD can be stored/chunked
+
+Milestone 5 — Gemini parsing
+Ship:
+- resume parser
+- JD analyzer
+- zod validation
+- parsed_json persistence
+- parsed display on profile page
+Done when:
+- parsed content appears reliably
+
+Milestone 6 — interview planning
+Ship:
+- interview setup page
+- personas query
+- plan generation
+- session creation
+Done when:
+- session exists with plan_json
+
+Milestone 7 — interview chat
+Ship:
+- start endpoint
+- next-turn endpoint
+- transcript UI
+- timer
+- state machine
+- transcript persistence
+Done when:
+- full text interview can run
+
+Milestone 8 — evaluation/review
+Ship:
+- finish endpoint
+- evaluator
+- coach
+- persist scores and feedback
+- review page
+Done when:
+- completed session produces review
+
+Milestone 9 — history + demo mode
+Ship:
+- history page
+- filters
+- deltas
+- demo data
+- Try Demo CTA
+Done when:
+- app is demoable from cold start
+
+Milestone 10 — polish
+Ship:
+- loading states
+- retry states
+- empty states
+- better copy
+- README cleanup
+Done when:
+- user can navigate without confusion
+
+Milestone 11 — voice scaffolding only
+Ship:
+- feature flag
+- reserved architecture points
+- no broken UI
+Done when:
+- text mode still stable, voice path prepared
+
+==================================================
+30. ACCEPTANCE CRITERIA FOR V1
+==================================================
+
+The build is DONE only when all are true:
+
+- app runs locally from a clean clone
+- local SQLite DB file is created automatically or through setup command
+- user can create a candidate profile
+- user can upload a PDF resume
+- app extracts text from the PDF
+- app parses resume into structured JSON via Gemini
+- user can add a job description
+- app analyzes the JD into structured JSON via Gemini
+- user can choose interview type, persona, difficulty, interest level, and duration
+- app generates a plan
+- app can run a text interview session
+- interviewer remains in persona
+- transcript persists locally
+- user can finish session
+- app generates evaluation + coaching
+- review page renders all required categories
+- history page shows past sessions
+- demo mode works
+- no hosted DB is used
+- all AI goes through Gemini
+- lint/typecheck pass
+- there are no placeholder routes or broken pages
+
+==================================================
+31. PACKAGE / COMMAND SUGGESTIONS
+==================================================
+
+Suggested packages (final exact versions left to Codex, prefer current compatible versions):
+
+Dependencies:
+- next
+- react
+- react-dom
+- typescript
+- tailwindcss
+- @tanstack/react-query
+- react-hook-form
+- zod
+- @hookform/resolvers
+- drizzle-orm
+- better-sqlite3
+- @google/genai
+- lucide-react
+- clsx
+- tailwind-merge
+- nanoid or rely on crypto.randomUUID
+- date-fns
+- pdf-parse or similar stable PDF text extractor
+- shadcn/ui dependencies
+- sonner or similar toast lib if desired
+
+Dev dependencies:
+- drizzle-kit
+- eslint
+- prettier if desired
+- tsx
+- vitest or jest
+- @testing-library/react if component tests desired
+
+Suggested scripts:
+- dev
+- build
+- start
+- lint
+- typecheck
+- test
+- db:generate
+- db:migrate
+- db:studio (optional if used)
+- seed
+- dev:reset
+
+==================================================
+32. README REQUIREMENTS
+==================================================
+
+README must include:
+- product summary
+- screenshots or placeholders optional
+- local setup
+- env vars
+- DB commands
+- seeding
+- demo mode
+- architecture overview
+- known limitations
+- roadmap
+- privacy note: data is local but Gemini calls send AI processing requests remotely
+
+==================================================
+33. PRIVACY / COPY GUIDELINES
+==================================================
+
+In settings or README, clearly state:
+- session data is stored locally in SQLite on the machine running the app
+- Gemini API is used for parsing/interview generation/evaluation, so relevant text is sent to Google for inference
+- there is no cloud account system in v1
+
+==================================================
+34. SAMPLE UI COPY
+==================================================
+
+Landing headline:
+“Practice the interview you’re actually going to have.”
+
+Landing subhead:
+“Upload your resume, paste the job description, choose an interviewer persona, and get role-specific feedback.”
+
+Button copy:
+- Create profile
+- Try demo
+- Generate interview plan
+- Start interview
+- End session
+- View review
+- Retry this interview
+
+==================================================
+35. STATE MANAGEMENT NOTES
+==================================================
+
+Prefer lightweight local state.
+Suggested:
+- React Query for server data
+- component state for interview input/transcript UI
+- avoid global state library unless truly necessary
+
+Possible local state on interview page:
+- pending message
+- isSubmitting
+- timer state
+- local transcript array merged with server state
+- session summary panel open/closed
+
+==================================================
+36. SEARCH / FTS NOTES
+==================================================
+
+Implement helper methods:
+- searchDocumentChunks(query, profileId?, documentTypes?, topK?)
+- searchTranscript(query, sessionId, topK?)
+- getRecentTranscriptWindow(sessionId, n)
+
+Scoring boost suggestions:
+- matching resume chunk: +1.0
+- matching job description chunk: +1.25 during live interview
+- matching prior weakness snippet: +0.75
+- matching recent transcript chunk: +1.5
+
+Keep retrieval simple and deterministic.
+
+==================================================
+37. INTERVIEWER RESPONSE STRATEGY
+==================================================
+
+For next turn generation:
+1. save candidate turn
+2. gather session config
+3. gather recent transcript turns
+4. retrieve relevant resume/JD snippets
+5. calculate remaining question budget and follow-up budget
+6. call Gemini liveInterviewer prompt
+7. validate structured internal response
+8. save agent turn
+9. return agentMessage to client
+
+Question selection preference:
+- if current answer weak and follow-up budget remains => follow-up
+- else move to next planned competency
+- if nearing end => closing question or final wrap-up
+
+==================================================
+38. EVALUATION STRATEGY
+==================================================
+
+On finish:
+1. fetch session
+2. fetch full transcript
+3. fetch parsed resume + parsed job
+4. call evaluateSession prompt
+5. validate evaluation JSON
+6. compute weighted overall score in app code
+7. call coachSession prompt with evaluation + transcript
+8. validate coaching JSON
+9. persist scores
+10. persist feedback items
+11. mark session completed
+12. return review ready
+
+Persist feedback items by category:
+- strength
+- weakness
+- missed_point
+- rewritten_answer
+- next_step
+
+==================================================
+39. SUGGESTED ZOD SCHEMAS
+==================================================
+
+Implement concrete zod schemas for:
+- profile create/update
+- document upload metadata
+- resume profile
+- job analysis
+- interview plan
+- next turn request
+- interviewer response
+- evaluation
+- coaching
+- review payload
+- history summary payload
+
+Recommendation:
+- keep numeric score ranges enforced 0 to 100
+- keep enum values strict
+- keep arrays bounded where appropriate
+
+==================================================
+40. FEATURE FLAGS
+==================================================
+
+App should support minimal feature flags:
+- ENABLE_VOICE
+- ENABLE_SEARCH_PAGE (optional)
+- ENABLE_DEMO_MODE (default true in dev)
+
+==================================================
+41. V2 VOICE PLAN (DO NOT BLOCK V1)
+==================================================
+
+Only after text app is complete:
+- browser microphone capture
+- live audio session
+- streamed transcript
+- optional TTS playback
+- sync audio transcript to same transcript_turns table
+- fallback to text if voice fails
+
+Leave architecture hooks only:
+- SessionMode enum already supports voice
+- gemini/live.ts stub
+- UI can hide voice option behind feature flag
+
+==================================================
+42. TROUBLESHOOTING NOTES FOR CODEX
+==================================================
+
+If PDF extraction is weak:
+- still store raw text
+- allow manual edit of stored job/application text docs
+- for resume, allow user to inspect/edit extracted text in a later improvement if time remains
+
+If structured output fails:
+- strengthen system prompt
+- lower schema complexity
+- retry once
+- log raw model response in dev only
+
+If interview turns feel too verbose:
+- tighten liveInterviewer prompt hard
+- enforce concise output in response schema
+- trim agentMessage length if needed
+
+If Drizzle/SQLite migration friction appears:
+- prioritize working schema/migrations over elegant abstractions
+- keep SQL simple
+
+If history page is late:
+- ship simple list first
+- trend stats can be light
+
+==================================================
+43. FINAL MASTER INSTRUCTION FOR CODEX
+==================================================
+
+Build Interview Loop as a complete, local-first vertical product.
+Do not build a platform.
+Do not over-generalize.
+Prefer hardcoded product decisions over unfinished configurability.
+Text mode first.
+SQLite only.
+Gemini only.
+Ship a polished, demoable app.
+
+Required complete product loop:
+resume + JD ingestion -> structured parsing -> plan generation -> text interview -> transcript storage -> review generation -> history.
+
+At every milestone:
+- keep app runnable
+- keep README updated
+- do not leave placeholder routes
+- prefer complete vertical slices over stubs
+
+==================================================
+44. OPTIONAL NICE-TO-HAVES IF TIME REMAINS
+==================================================
+
+Only after core v1 is done:
+- import/export local data
+- richer trend charts
+- searchable transcript viewer
+- edit extracted resume text before parsing
+- role-specific drill modes
+- “retry only weak questions”
+- dark mode polish
+- copy-to-clipboard on rewritten answers
+
+==================================================
+45. DEFINITIVE “DONE / NOT DONE” TEST
+==================================================
+
+If a judge or owner can:
+- open app
+- create or use demo profile
+- upload or use seeded resume/JD
+- start interview
+- answer several questions
+- finish
+- see meaningful feedback
+- open history
+
+...then the app is done enough for the hackathon.
+
+If any of those breaks, the app is not done.
+
+END OF SPEC
