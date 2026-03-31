@@ -18,9 +18,18 @@ function getSelectedFile(input: HTMLInputElement | null) {
   return input?.files?.[0] ?? null;
 }
 
-function validateDocumentSubmission(file: File | null, text: string) {
+function validateDocumentSubmission(
+  file: File | null,
+  text: string,
+  type: "resume" | "job_description" | "cover_letter" | "application_answer" | "company_context",
+  title: string,
+) {
   if (!file && !text.trim()) {
     throw new Error("Upload a file or paste document text.");
+  }
+
+  if (type === "job_description" && !title.trim()) {
+    throw new Error("Enter a job title before uploading the job description.");
   }
 }
 
@@ -31,13 +40,18 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
   const [validation, setValidation] = useState<CVValidationResult | null>(null);
+  const titleRequired = type === "job_description";
+  const canSubmit =
+    !pending &&
+    Boolean(getSelectedFile(fileRef.current) || text.trim()) &&
+    (!titleRequired || Boolean(title.trim()));
 
   async function handleSubmit() {
     try {
       setPending(true);
       setValidation(null);
       const file = getSelectedFile(fileRef.current);
-      validateDocumentSubmission(file, text);
+      validateDocumentSubmission(file, text, type, title);
 
       const formData = new FormData();
       formData.set("candidateProfileId", profileId);
@@ -95,7 +109,7 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
           Add document
         </CardTitle>
         <CardDescription>
-          Upload a PDF or paste text content directly.
+          Upload a PDF or paste text content directly. Job descriptions require a job title; other document titles are optional.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -111,11 +125,11 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Title</Label>
+            <Label>{titleRequired ? "Job title *" : "Title (optional)"}</Label>
             <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="e.g. My Resume 2026"
+              placeholder={titleRequired ? "e.g. Senior Frontend Engineer" : "e.g. My Resume 2026"}
             />
           </div>
         </div>
@@ -141,7 +155,7 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
         )}
 
         <div className="flex justify-end">
-          <Button type="button" onClick={handleSubmit} disabled={pending}>
+          <Button type="button" onClick={handleSubmit} disabled={!canSubmit}>
             {pending ? (
               <>
                 <Loader2 className="mr-1.5 size-4 animate-spin" />

@@ -65,9 +65,18 @@ function getSelectedFile(input: HTMLInputElement | null) {
   return input?.files?.[0] ?? null;
 }
 
-function validateDocumentSubmission(file: File | null, text: string) {
+function validateDocumentSubmission(
+  file: File | null,
+  text: string,
+  type: DocumentType,
+  title: string,
+) {
   if (!file && !text.trim()) {
     throw new Error("Upload a file or paste document text.");
+  }
+
+  if (type === "job_description" && !title.trim()) {
+    throw new Error("Enter a job title before uploading the job description.");
   }
 }
 
@@ -469,7 +478,7 @@ function StepProfileWithCV({
           <CardDescription>
             {cvState === "done"
               ? "Review the auto-filled fields below and adjust anything that needs changing."
-              : "Fill in your candidate information, or drop a CV above to auto-fill."}
+              : "Fill in your candidate information, or drop a CV above to auto-fill. Only your full name is required here; the rest is optional."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -492,7 +501,7 @@ function StepProfileWithCV({
             </div>
             <div className="space-y-2">
               <Label htmlFor="headline" className="flex items-center gap-1.5">
-                Headline
+                Headline (optional)
                 {autoFilledFields.includes("Headline") && (
                   <Badge variant="success" className="text-[9px] px-1.5 py-0">auto-filled</Badge>
                 )}
@@ -505,7 +514,7 @@ function StepProfileWithCV({
             </div>
             <div className="space-y-2">
               <Label htmlFor="email" className="flex items-center gap-1.5">
-                Email
+                Email (optional)
                 {autoFilledFields.includes("Email") && (
                   <Badge variant="success" className="text-[9px] px-1.5 py-0">auto-filled</Badge>
                 )}
@@ -519,7 +528,7 @@ function StepProfileWithCV({
             </div>
             <div className="space-y-2">
               <Label htmlFor="yearsExperience" className="flex items-center gap-1.5">
-                Years of experience
+                Years of experience (optional)
                 {autoFilledFields.includes("Experience") && (
                   <Badge variant="success" className="text-[9px] px-1.5 py-0">auto-filled</Badge>
                 )}
@@ -542,7 +551,7 @@ function StepProfileWithCV({
             </div>
             <div className="space-y-2">
               <Label htmlFor="primaryDomain" className="flex items-center gap-1.5">
-                Primary domain
+                Primary domain (optional)
                 {autoFilledFields.includes("Domain") && (
                   <Badge variant="success" className="text-[9px] px-1.5 py-0">auto-filled</Badge>
                 )}
@@ -555,7 +564,7 @@ function StepProfileWithCV({
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="targetRoles" className="flex items-center gap-1.5">
-                Target roles
+                Target roles (optional)
                 {autoFilledFields.includes("Target roles") && (
                   <Badge variant="success" className="text-[9px] px-1.5 py-0">auto-filled</Badge>
                 )}
@@ -577,7 +586,7 @@ function StepProfileWithCV({
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="notes">Notes</Label>
+              <Label htmlFor="notes">Notes (optional)</Label>
               <Textarea
                 id="notes"
                 placeholder="Any additional context about your background..."
@@ -638,7 +647,7 @@ function StepJobDescription({
     try {
       setPending(true);
       const file = getSelectedFile(fileRef.current);
-      validateDocumentSubmission(file, text);
+      validateDocumentSubmission(file, text, type, title);
       const formData = new FormData();
       formData.set("candidateProfileId", profileId);
       formData.set("type", type);
@@ -712,6 +721,15 @@ function StepJobDescription({
 
   const hasJob = uploadedDocs.some((doc) => doc.type === "job_description");
   const resumeReady = hasResume || uploadedDocs.some((doc) => doc.type === "resume");
+  const documentBodyProvided = Boolean(getSelectedFile(fileRef.current) || text.trim());
+  const titleRequired = type === "job_description";
+  const canUpload = !pending && documentBodyProvided && (!titleRequired || Boolean(title.trim()));
+  const titleLabel =
+    type === "job_description" ? "Job title *" : "Document title (optional)";
+  const titlePlaceholder =
+    type === "job_description"
+      ? "e.g. Senior Frontend Engineer"
+      : "e.g. Senior Engineer - Google";
 
   return (
     <div className="space-y-4">
@@ -724,7 +742,7 @@ function StepJobDescription({
           <CardDescription>
             {hasResume
               ? "Your resume was already uploaded. Now add the job description you're targeting."
-              : "Add your resume and the job description you're targeting. You can add more documents later from your profile page."}
+              : "Add your resume and the job description you're targeting. Resume and job description content are required to run an interview. A job title is required when uploading a job description."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -757,11 +775,11 @@ function StepJobDescription({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Title</Label>
+              <Label>{titleLabel}</Label>
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Senior Engineer - Google"
+                placeholder={titlePlaceholder}
               />
             </div>
           </div>
@@ -787,7 +805,7 @@ function StepJobDescription({
             />
           </div>
           <div className="flex justify-end">
-            <Button type="button" onClick={handleUpload} disabled={pending}>
+            <Button type="button" onClick={handleUpload} disabled={!canUpload}>
               {pending ? (
                 <>
                   <Loader2 className="mr-1.5 size-4 animate-spin" />
@@ -824,11 +842,11 @@ function StepJobDescription({
               <span className="font-medium text-foreground">resume</span> to continue.
             </p>
           )}
-          {resumeReady && hasJob && (
-            <p className="font-medium text-emerald-400">
-              Documents uploaded. Review them on the profile page before starting an interview.
-            </p>
-          )}
+            {resumeReady && hasJob && (
+              <p className="font-medium text-emerald-400">
+                Documents uploaded. Review them on the profile page before starting an interview.
+              </p>
+            )}
         </div>
         <Button onClick={onFinish} variant={resumeReady && hasJob ? "glow" : "outline"}>
           {resumeReady && hasJob ? (

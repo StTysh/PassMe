@@ -48,7 +48,7 @@ export default async function InterviewSetupPage({
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Interview setup</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Select a parsed candidate and target role, then generate a role-aware plan.
+          Select a parsed candidate and job description, then generate a role-aware plan.
         </p>
       </div>
 
@@ -71,7 +71,7 @@ export default async function InterviewSetupPage({
               <SetupStep
                 done={hasProfiles}
                 label="Create a candidate profile"
-                description="Add your name, headline, and target roles."
+                description="Add at least your name. Headline and target roles are optional but recommended."
                 href="/profiles/new"
                 actionLabel="Create profile"
               />

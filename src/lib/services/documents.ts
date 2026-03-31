@@ -77,6 +77,10 @@ export const documentsService = {
       throw new BadRequestError("Either a file or text content is required.");
     }
 
+    if (input.type === "job_description" && !input.title?.trim()) {
+      throw new BadRequestError("Job title is required when uploading a job description.");
+    }
+
     let rawText = input.text?.trim() ?? "";
     let sourceFilename: string | null = null;
     let mimeType: string | null = null;
