@@ -1,12 +1,14 @@
 import { documentsService } from "@/lib/services/documents";
 import { documentUploadSchema } from "@/lib/validation/documents";
 import { handleRouteError, ok } from "@/lib/api";
+import { assertRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
+    assertRateLimit(request, "documents:upload", 20, 60_000);
     const contentType = request.headers.get("content-type") ?? "";
 
     if (contentType.includes("multipart/form-data")) {

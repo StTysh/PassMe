@@ -101,7 +101,13 @@ export const transcriptTurns = sqliteTable(
     metadataJson: text("metadata_json"),
     createdAt: integer("created_at").notNull(),
   },
-  (table) => [index("transcript_turns_session_turn_idx").on(table.interviewSessionId, table.turnIndex)],
+  (table) => [
+    index("transcript_turns_session_turn_idx").on(table.interviewSessionId, table.turnIndex),
+    uniqueIndex("transcript_turns_session_turn_unique_idx").on(
+      table.interviewSessionId,
+      table.turnIndex,
+    ),
+  ],
 );
 
 export const scores = sqliteTable(

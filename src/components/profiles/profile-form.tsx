@@ -97,7 +97,21 @@ export function ProfileForm({
           </div>
           <div className="space-y-2">
             <Label htmlFor="yearsExperience">Years of experience</Label>
-            <Input id="yearsExperience" type="number" placeholder="5" {...form.register("yearsExperience")} />
+            <Input
+              id="yearsExperience"
+              type="number"
+              placeholder="5"
+              {...form.register("yearsExperience", {
+                setValueAs: (value) => {
+                  if (value === "" || value === null || value === undefined) {
+                    return null;
+                  }
+
+                  const parsed = Number(value);
+                  return Number.isNaN(parsed) ? null : parsed;
+                },
+              })}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="primaryDomain">Primary domain</Label>

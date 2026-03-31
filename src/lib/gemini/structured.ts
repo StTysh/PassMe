@@ -1,9 +1,14 @@
 import { z, toJSONSchema } from "zod";
 
-import { GEMINI_DEFAULT_MODEL, GEMINI_LITE_MODEL, GEMINI_JSON_RESPONSE_MIME_TYPE } from "@/lib/gemini/models";
+import { UpstreamError } from "@/lib/api";
+import {
+  GEMINI_DEFAULT_MODEL,
+  GEMINI_JSON_RESPONSE_MIME_TYPE,
+  GEMINI_LITE_MODEL,
+} from "@/lib/gemini/models";
 import { generateGeminiText, type GeminiTextResult } from "@/lib/gemini/text";
-import { generateOpenAIStructured } from "@/lib/openai/structured";
 import { getProviderForTask, hasGeminiApiKey, hasOpenAIApiKey } from "@/lib/env";
+import { generateOpenAIStructured } from "@/lib/openai/structured";
 import type { PromptDefinition } from "@/lib/prompts/shared";
 
 function toGeminiJsonSchema(schema: z.ZodTypeAny): unknown {
@@ -155,7 +160,7 @@ export async function generateGeminiStructured<TSchema extends z.ZodTypeAny>(
 
     if (!textResult.ok) {
       if (!schemaDropped && nativeSchema && isSchemaTooBigError(textResult.message)) {
-        console.warn("[Gemini structured] Schema too complex for native constraint — retrying without it");
+        console.warn("[Gemini structured] Schema too complex for native constraint - retrying without it");
         schemaDropped = true;
         attemptIndex -= 1;
         continue;
@@ -225,10 +230,12 @@ export async function generateStructured<T>({
   prompt,
   schema,
   fallback,
+  allowStaticFallback = true,
 }: {
   prompt: string | PromptDefinition;
   schema: z.ZodType<T>;
   fallback: () => T;
+  allowStaticFallback?: boolean;
 }) {
   const def = typeof prompt === "string" ? undefined : prompt;
   const taskName = def?.name ?? "unknown";
@@ -256,36 +263,58 @@ export async function generateStructured<T>({
   if (provider === "openai") {
     const oaiResult = await generateOpenAIStructured(oaiRequest);
     if (oaiResult.ok) {
-      console.log(`[AI] ${taskName} → openai (${oaiResult.model})`);
+      console.log(`[AI] ${taskName} -> openai (${oaiResult.model})`);
       return oaiResult.value as T;
     }
-    console.warn(`[AI] ${taskName} → openai failed (${oaiResult.reason}), trying gemini fallback`);
+    console.warn(`[AI] ${taskName} -> openai failed (${oaiResult.reason}), trying gemini fallback`);
 
     if (hasGeminiApiKey) {
       const geminiResult = await generateGeminiStructured(geminiRequest);
       if (geminiResult.ok) {
-        console.log(`[AI] ${taskName} → gemini fallback (${geminiResult.model})`);
+        console.log(`[AI] ${taskName} -> gemini fallback (${geminiResult.model})`);
         return geminiResult.value as T;
       }
-      console.warn(`[AI] ${taskName} → gemini fallback also failed (${geminiResult.reason}), using static fallback`);
+      if (!allowStaticFallback) {
+        throw new UpstreamError(`AI generation failed for ${taskName}.`, {
+          provider: "gemini",
+          reason: geminiResult.reason,
+        });
+      }
+      console.warn(`[AI] ${taskName} -> gemini fallback also failed (${geminiResult.reason}), using static fallback`);
+    } else if (!allowStaticFallback) {
+      throw new UpstreamError(`AI generation failed for ${taskName}.`, {
+        provider: "gemini",
+        reason: "missing_api_key",
+      });
     }
     return fallback();
   }
 
   const result = await generateGeminiStructured(geminiRequest);
   if (result.ok) {
-    console.log(`[AI] ${taskName} → gemini (${result.model})`);
+    console.log(`[AI] ${taskName} -> gemini (${result.model})`);
     return result.value as T;
   }
-  console.warn(`[AI] ${taskName} → gemini failed (${result.reason}), trying openai fallback`);
+  console.warn(`[AI] ${taskName} -> gemini failed (${result.reason}), trying openai fallback`);
 
   if (hasOpenAIApiKey) {
     const oaiResult = await generateOpenAIStructured(oaiRequest);
     if (oaiResult.ok) {
-      console.log(`[AI] ${taskName} → openai fallback (${oaiResult.model})`);
+      console.log(`[AI] ${taskName} -> openai fallback (${oaiResult.model})`);
       return oaiResult.value as T;
     }
-    console.warn(`[AI] ${taskName} → openai fallback also failed (${oaiResult.reason}), using static fallback`);
+    if (!allowStaticFallback) {
+      throw new UpstreamError(`AI generation failed for ${taskName}.`, {
+        provider: "openai",
+        reason: oaiResult.reason,
+      });
+    }
+    console.warn(`[AI] ${taskName} -> openai fallback also failed (${oaiResult.reason}), using static fallback`);
+  } else if (!allowStaticFallback) {
+    throw new UpstreamError(`AI generation failed for ${taskName}.`, {
+      provider: "openai",
+      reason: "missing_api_key",
+    });
   }
   return fallback();
 }

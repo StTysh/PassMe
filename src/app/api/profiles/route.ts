@@ -1,5 +1,6 @@
 import { profileSchema } from "@/lib/validation/profile";
 import { handleRouteError, ok } from "@/lib/api";
+import { assertRateLimit } from "@/lib/rate-limit";
 import { profilesService } from "@/lib/services/profiles";
 
 export async function GET() {
@@ -12,6 +13,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    assertRateLimit(request, "profiles:create", 20, 60_000);
     const body = profileSchema.parse(await request.json());
     const profile = profilesService.createCandidateProfile({
       fullName: body.fullName,

@@ -1,22 +1,32 @@
 import { FOLLOW_UP_CAP, TURN_HISTORY_WINDOW } from "@/lib/constants";
+import { getSqliteClient } from "@/db/client";
 import { assignVoiceToInterviewer, getElevenLabsApiKey } from "@/lib/elevenlabs/client";
 import { geminiTasks } from "@/lib/gemini/tasks";
+import { ConflictError, NotFoundError } from "@/lib/api";
 import { applyInterestLevel } from "@/lib/personas/defaults";
 import { documentsRepo } from "@/lib/repositories/documentsRepo";
 import { interviewsRepo } from "@/lib/repositories/interviewsRepo";
 import { personasRepo } from "@/lib/repositories/personasRepo";
+import { scoresRepo } from "@/lib/repositories/scoresRepo";
 import { settingsRepo } from "@/lib/repositories/settingsRepo";
 import { transcriptRepo } from "@/lib/repositories/transcriptRepo";
 import { buildRetrievalContext } from "@/lib/retrieval/context";
 import { ensureDatabaseReady } from "@/lib/services/bootstrap";
 import { evaluationService } from "@/lib/services/evaluation";
+import { companyResearchSchema } from "@/lib/types/domain";
 import type { PanelInterviewer, CompanyResearch } from "@/lib/types/domain";
+import { z } from "zod";
 
 const COMPANY_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const companyResearchCacheSchema = z.object({
+  version: z.literal(1),
+  cachedAt: z.number().int().nonnegative(),
+  data: companyResearchSchema,
+});
 
 function getCompanyResearchCache(companyName: string): CompanyResearch | null {
   const cacheKey = `company_research:${companyName.toLowerCase().trim()}`;
-  const cached = settingsRepo.getSetting(cacheKey) as { data: CompanyResearch; cachedAt: number } | null;
+  const cached = settingsRepo.getSettingParsed(cacheKey, companyResearchCacheSchema);
   if (!cached) return null;
   if (Date.now() - cached.cachedAt > COMPANY_CACHE_TTL_MS) return null;
   console.log(`[Cache] Company research HIT for "${companyName}"`);
@@ -25,7 +35,7 @@ function getCompanyResearchCache(companyName: string): CompanyResearch | null {
 
 function setCompanyResearchCache(companyName: string, data: CompanyResearch) {
   const cacheKey = `company_research:${companyName.toLowerCase().trim()}`;
-  settingsRepo.upsertSetting(cacheKey, { data, cachedAt: Date.now() });
+  settingsRepo.upsertSetting(cacheKey, { version: 1, data, cachedAt: Date.now() });
 }
 
 function assignVoices(rawPanel: PanelInterviewer[]): PanelInterviewer[] {
@@ -73,10 +83,16 @@ export const interviewsService = {
 
     const resume = documentsRepo.listDocumentsForProfile(input.candidateProfileId, "resume")[0];
     const jobDocument = documentsRepo.getDocumentById(input.jobDocumentId);
+    if (!jobDocument || jobDocument.candidateProfileId !== input.candidateProfileId) {
+      throw new NotFoundError("Job description not found for this profile.");
+    }
+    if (jobDocument.type !== "job_description") {
+      throw new ConflictError("Selected document is not a job description.");
+    }
     if (!resume?.parsedJson) {
       throw new Error("Resume must be parsed before planning.");
     }
-    if (!jobDocument?.parsedJson) {
+    if (!jobDocument.parsedJson) {
       throw new Error("Job description must be parsed before planning.");
     }
 
@@ -143,7 +159,7 @@ export const interviewsService = {
       });
       console.log(`[Panel] Enriched ${panel.length} interviewers`);
     } else {
-      console.log(`[Panel] Solo interviewer — skipped enrichment`);
+      console.log("[Panel] Solo interviewer - skipped enrichment");
     }
 
     const defaultPersona = personasRepo.getPersonaByKey("neutral_manager");
@@ -186,9 +202,31 @@ export const interviewsService = {
 
   startInterview(sessionId: string) {
     ensureDatabaseReady();
-    const session = interviewsRepo.markSessionStarted(sessionId);
+    const existingSession = interviewsRepo.getSessionById(sessionId);
+    if (!existingSession) {
+      throw new NotFoundError("Session not found.");
+    }
+    if (existingSession.status === "completed" || existingSession.status === "cancelled") {
+      throw new ConflictError("Session can no longer be started.");
+    }
+
+    if (existingSession.status === "active") {
+      const existingTurns = transcriptRepo.listTurnsForSession(sessionId);
+      const firstAgentTurn = existingTurns.find((turn) => turn.speaker === "agent");
+      const panel = (existingSession.panelJson ?? []) as PanelInterviewer[];
+      return {
+        firstMessage: firstAgentTurn?.text
+          ?? panel[0]?.openingMessage
+          ?? "Interview already started.",
+        interviewerKey: firstAgentTurn?.interviewerKey ?? panel[0]?.key ?? "interviewer_1",
+        session: existingSession,
+        panel,
+      };
+    }
+
+    const session = interviewsRepo.markSessionStartedIfPlanned(sessionId);
     if (!session) {
-      throw new Error("Session not found.");
+      throw new ConflictError("Session could not be started.");
     }
 
     const panel = (session.panelJson ?? []) as PanelInterviewer[];
@@ -196,7 +234,7 @@ export const interviewsService = {
     const interviewerKey = leadInterviewer?.key ?? "interviewer_1";
 
     const firstMessage = leadInterviewer?.openingMessage
-      ?? `Hi, I'm ${leadInterviewer?.name ?? "your interviewer"} — ${leadInterviewer?.role ?? "the interviewer for today"}. Thanks for taking the time to speak with us. I've had a look at your background and I'd love to start with a quick overview — could you walk me through your experience and what brought you to this opportunity?`;
+      ?? `Hi, I'm ${leadInterviewer?.name ?? "your interviewer"} - ${leadInterviewer?.role ?? "the interviewer for today"}. Thanks for taking the time to speak with us. I've had a look at your background and I'd love to start with a quick overview - could you walk me through your experience and what brought you to this opportunity?`;
 
     transcriptRepo.appendTurn({
       interviewSessionId: sessionId,
@@ -218,10 +256,10 @@ export const interviewsService = {
     ensureDatabaseReady();
     const session = interviewsRepo.getSessionById(sessionId);
     if (!session) {
-      throw new Error("Session not found.");
+      throw new NotFoundError("Session not found.");
     }
     if (session.status !== "active") {
-      throw new Error("Session is not active.");
+      throw new ConflictError("Session is not active.");
     }
 
     transcriptRepo.appendTurn({
@@ -263,6 +301,11 @@ export const interviewsService = {
       companyResearch: companyResearch ?? undefined,
     });
 
+    const latestSession = interviewsRepo.getSessionById(sessionId);
+    if (!latestSession || latestSession.status !== "active") {
+      throw new ConflictError("Session is no longer active.");
+    }
+
     const interviewerKey = response.interviewerKey ?? panel[0]?.key ?? "interviewer_1";
 
     transcriptRepo.appendTurn({
@@ -278,19 +321,47 @@ export const interviewsService = {
 
   async finishInterview(sessionId: string) {
     ensureDatabaseReady();
+    const session = interviewsRepo.getSessionById(sessionId);
+    if (!session) {
+      throw new NotFoundError("Session not found.");
+    }
+    const existingScore = scoresRepo.getScoreForSession(sessionId);
+    if (session.status === "completed" || existingScore) {
+      if (session.status === "active" && existingScore) {
+        interviewsRepo.markSessionCompletedIfActive(sessionId);
+      }
+      return {
+        reviewReady: true,
+      };
+    }
+    if (session.status !== "active") {
+      throw new ConflictError("Only active sessions can be finished.");
+    }
+
     const evaluation = await evaluationService.evaluateCompletedSession(sessionId);
     const coaching = await geminiTasks.coachSession({
       transcript: evaluation.transcript,
       evaluation: evaluation.evaluation,
     });
 
-    evaluationService.persistReview({
-      sessionId,
-      evaluation: evaluation.evaluation,
-      band: evaluation.band,
-      coaching,
-    });
-    interviewsRepo.markSessionCompleted(sessionId);
+    const currentSession = interviewsRepo.getSessionById(sessionId);
+    if (!currentSession || currentSession.status !== "active") {
+      throw new ConflictError("Session is no longer active.");
+    }
+
+    const sqlite = getSqliteClient();
+    sqlite.transaction(() => {
+      evaluationService.persistReview({
+        sessionId,
+        evaluation: evaluation.evaluation,
+        band: evaluation.band,
+        coaching,
+      });
+      const completedSession = interviewsRepo.markSessionCompletedIfActive(sessionId);
+      if (!completedSession) {
+        throw new ConflictError("Session could not be marked completed.");
+      }
+    })();
 
     return {
       reviewReady: true,

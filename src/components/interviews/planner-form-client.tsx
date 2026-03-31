@@ -74,7 +74,6 @@ export function PlannerFormClient({
   const [profileId, setProfileId] = useState(initialProfile);
   const [jobId, setJobId] = useState(
     jobs.find((job) => job.candidateProfileId === initialProfile)?.id ??
-      jobs[0]?.id ??
       "",
   );
   const [companyName, setCompanyName] = useState("");

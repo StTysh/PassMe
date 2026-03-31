@@ -1,8 +1,17 @@
-import { handleRouteError, ok } from "@/lib/api";
+import {
+  BadRequestError,
+  PayloadTooLargeError,
+  UnsupportedMediaTypeError,
+  UnprocessableEntityError,
+  handleRouteError,
+  ok,
+} from "@/lib/api";
 import { geminiTasks } from "@/lib/gemini/tasks";
 import { extractPdfText } from "@/lib/parser/pdf";
 import { normalizeDocumentText } from "@/lib/parser/documents";
+import { assertRateLimit } from "@/lib/rate-limit";
 import { ensureDatabaseReady } from "@/lib/services/bootstrap";
+import { validateExtractProfileFile } from "@/lib/validation/documents";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,26 +19,43 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     ensureDatabaseReady();
+    assertRateLimit(request, "documents:extract-profile", 10, 60_000);
     const formData = await request.formData();
     const file = formData.get("file");
-
-    if (!(file instanceof File)) {
-      return new Response(JSON.stringify({ ok: false, error: "No file provided" }), { status: 400 });
+    let fileKind: { isPdf: boolean; isText: boolean };
+    try {
+      fileKind = validateExtractProfileFile(file instanceof File ? file : null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Invalid file.";
+      if (/10 MB limit/i.test(message)) {
+        throw new PayloadTooLargeError(message);
+      }
+      if (/Unsupported file type/i.test(message)) {
+        throw new UnsupportedMediaTypeError(message);
+      }
+      if (/empty/i.test(message) || /No file provided/i.test(message)) {
+        throw new BadRequestError(message);
+      }
+      throw new BadRequestError("Invalid file upload.");
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const inputFile = file as File;
+    const buffer = Buffer.from(await inputFile.arrayBuffer());
     let rawText =
-      file.type === "application/pdf"
+      fileKind.isPdf
         ? await extractPdfText(buffer)
-        : buffer.toString("utf8");
+        : fileKind.isText
+          ? buffer.toString("utf8")
+          : "";
 
     rawText = normalizeDocumentText(rawText);
 
-    if (!rawText || rawText.length < 20) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Could not extract text from file" }),
-        { status: 400 },
-      );
+    if (!rawText) {
+      throw new UnprocessableEntityError("Could not extract readable text from the file.");
+    }
+
+    if (rawText.length < 20) {
+      throw new UnprocessableEntityError("Could not extract enough readable text from the file.");
     }
 
     const parsed = await geminiTasks.parseResume(rawText);

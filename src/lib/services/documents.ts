@@ -1,6 +1,8 @@
 import { chunkText } from "@/lib/chunking/text";
+import { BadRequestError, NotFoundError } from "@/lib/api";
 import { geminiTasks } from "@/lib/gemini/tasks";
 import { documentsRepo } from "@/lib/repositories/documentsRepo";
+import { profilesRepo } from "@/lib/repositories/profilesRepo";
 import { ensureDatabaseReady } from "@/lib/services/bootstrap";
 import { extractPdfText } from "@/lib/parser/pdf";
 import { normalizeDocumentText } from "@/lib/parser/documents";
@@ -14,6 +16,14 @@ export const documentsService = {
     file?: File;
   }) {
     ensureDatabaseReady();
+    const profile = profilesRepo.getProfileById(input.candidateProfileId);
+    if (!profile) {
+      throw new NotFoundError("Candidate profile not found.");
+    }
+
+    if (!input.file && !input.text?.trim()) {
+      throw new BadRequestError("Either a file or text content is required.");
+    }
 
     let rawText = input.text?.trim() ?? "";
     let sourceFilename: string | null = null;
@@ -32,7 +42,7 @@ export const documentsService = {
     rawText = normalizeDocumentText(rawText);
 
     if (!rawText) {
-      throw new Error("Document text is empty after extraction.");
+      throw new BadRequestError("Document text is empty after extraction.");
     }
 
     const document = documentsRepo.createDocument({

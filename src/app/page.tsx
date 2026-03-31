@@ -9,6 +9,16 @@ import { isDemoModeEnabled } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
+function sessionHref(session: {
+  id: string;
+  status: string;
+  score?: { overallScore: number } | null;
+}) {
+  return session.status === "completed" && session.score
+    ? `/interviews/${session.id}/review`
+    : `/interviews/${session.id}`;
+}
+
 export default function HomePage() {
   const history = historyService.getHistorySummary();
   const profiles = profilesService.listProfiles();
@@ -107,7 +117,7 @@ export default function HomePage() {
               personaName: session.personaName,
               difficulty: session.difficulty,
               score: session.score?.overallScore ?? 0,
-              href: `/interviews/${session.id}/review`,
+              href: sessionHref(session),
             }))}
           />
         ) : (

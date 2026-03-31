@@ -147,6 +147,7 @@ function StepProfileWithCV({
   });
 
   const { isSubmitting, errors } = form.formState;
+  const targetRoles = form.watch("targetRoles");
 
   const [cvState, setCvState] = useState<"idle" | "uploading" | "parsing" | "done" | "error">("idle");
   const [cvFileName, setCvFileName] = useState<string | null>(null);
@@ -209,7 +210,7 @@ function StepProfileWithCV({
       if (filled.length > 0) {
         toast.success(`Auto-filled ${filled.length} fields from your CV`);
       } else {
-        toast.info("CV analyzed — no new fields to fill");
+        toast.info("CV analyzed - no new fields to fill");
       }
     } catch (error) {
       setCvState("error");
@@ -285,11 +286,11 @@ function StepProfileWithCV({
           }),
         });
       } catch {
-        toast.error("CV upload failed — you can re-upload from your profile page");
+        toast.error("CV upload failed - you can re-upload from your profile page");
       }
     }
 
-    toast.success("Profile created — now add your job description");
+    toast.success("Profile created - now add your job description");
     onCreated(newProfileId, resumeDocId);
   });
 
@@ -321,7 +322,7 @@ function StepProfileWithCV({
                     Drop your CV to auto-fill your profile
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    We&apos;ll extract your name, email, experience, and more — or fill in manually below
+                    We&apos;ll extract your name, email, experience, and more - or fill in manually below
                   </p>
                 </div>
                 <Button
@@ -370,7 +371,7 @@ function StepProfileWithCV({
                   <p className="mt-1 text-xs text-muted-foreground">
                     {cvFileName}
                     {autoFilledFields.length > 0 && (
-                      <> — filled: {autoFilledFields.join(", ")}</>
+                      <> - filled: {autoFilledFields.join(", ")}</>
                     )}
                   </p>
                 </div>
@@ -418,6 +419,8 @@ function StepProfileWithCV({
                   onClick={() => {
                     setCvState("idle");
                     setCvFileName(null);
+                    setCvFile(null);
+                    setAutoFilledFields([]);
                     if (fileInputRef.current) fileInputRef.current.value = "";
                   }}
                 >
@@ -495,7 +498,16 @@ function StepProfileWithCV({
                 id="yearsExperience"
                 type="number"
                 placeholder="5"
-                {...form.register("yearsExperience")}
+                {...form.register("yearsExperience", {
+                  setValueAs: (value) => {
+                    if (value === "" || value === null || value === undefined) {
+                      return null;
+                    }
+
+                    const parsed = Number(value);
+                    return Number.isNaN(parsed) ? null : parsed;
+                  },
+                })}
               />
             </div>
             <div className="space-y-2">
@@ -521,11 +533,7 @@ function StepProfileWithCV({
               <Input
                 id="targetRoles"
                 placeholder="Separate with commas (e.g. PM, TPM, Engineering Manager)"
-                defaultValue={
-                  Array.isArray(form.getValues("targetRoles"))
-                    ? (form.getValues("targetRoles") as string[]).join(", ")
-                    : ""
-                }
+                value={Array.isArray(targetRoles) ? targetRoles.join(", ") : ""}
                 key={autoFilledFields.join(",")}
                 onChange={(event) =>
                   form.setValue(
@@ -764,7 +772,7 @@ function StepJobDescription({
           )}
           {resumeReady && hasJob && (
             <p className="font-medium text-emerald-400">
-              You&apos;re all set — ready to start practicing interviews.
+              You&apos;re all set - ready to start practicing interviews.
             </p>
           )}
         </div>

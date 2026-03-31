@@ -1,4 +1,4 @@
-import { handleRouteError, ok } from "@/lib/api";
+import { NotFoundError, handleRouteError, ok } from "@/lib/api";
 import { profilesService } from "@/lib/services/profiles";
 import { profileSchema } from "@/lib/validation/profile";
 
@@ -10,7 +10,7 @@ export async function GET(
     const { profileId } = await params;
     const workspace = profilesService.getCandidateWorkspace(profileId);
     if (!workspace) {
-      throw new Error("Profile not found.");
+      throw new NotFoundError("Profile not found.");
     }
     return ok(workspace);
   } catch (error) {
@@ -34,6 +34,9 @@ export async function PUT(
       primaryDomain: body.primaryDomain || null,
       notes: body.notes || null,
     });
+    if (!profile) {
+      throw new NotFoundError("Profile not found.");
+    }
     return ok({ profile });
   } catch (error) {
     return handleRouteError(error);

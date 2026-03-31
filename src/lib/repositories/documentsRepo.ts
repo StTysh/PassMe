@@ -1,8 +1,9 @@
 import { and, desc, eq } from "drizzle-orm";
 
 import { getDb, getSqliteClient } from "@/db/client";
-import { documentChunks, documents } from "@/db/schema";
+import { documents } from "@/db/schema";
 import { createId } from "@/lib/ids";
+import { sanitizeFtsQuery } from "@/lib/utils";
 import type { DocumentType } from "@/lib/types/domain";
 
 function mapDocument(row: typeof documents.$inferSelect) {
@@ -92,34 +93,44 @@ export const documentsRepo = {
       metadataJson?: Record<string, unknown> | null;
     }>,
   ) {
-    const db = getDb();
     const sqlite = getSqliteClient();
+    const replace = sqlite.transaction(() => {
+      sqlite.prepare("DELETE FROM document_chunks WHERE document_id = ?").run(documentId);
+      sqlite.prepare("DELETE FROM document_chunks_fts WHERE document_id = ?").run(documentId);
 
-    db.delete(documentChunks).where(eq(documentChunks.documentId, documentId)).run();
-    sqlite.prepare("DELETE FROM document_chunks_fts WHERE document_id = ?").run(documentId);
+      for (const chunk of chunks) {
+        const chunkId = createId("chunk");
+        sqlite
+          .prepare(
+            `INSERT INTO document_chunks (
+              id, document_id, chunk_index, text, token_estimate, metadata_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            chunkId,
+            documentId,
+            chunk.chunkIndex,
+            chunk.text,
+            chunk.tokenEstimate,
+            chunk.metadataJson ? JSON.stringify(chunk.metadataJson) : null,
+            Date.now(),
+          );
 
-    for (const chunk of chunks) {
-      const chunkId = createId("chunk");
-      db.insert(documentChunks)
-        .values({
-          id: chunkId,
-          documentId,
-          chunkIndex: chunk.chunkIndex,
-          text: chunk.text,
-          tokenEstimate: chunk.tokenEstimate,
-          metadataJson: chunk.metadataJson ? JSON.stringify(chunk.metadataJson) : null,
-          createdAt: Date.now(),
-        })
-        .run();
+        sqlite
+          .prepare("INSERT INTO document_chunks_fts (id, document_id, text) VALUES (?, ?, ?)")
+          .run(chunkId, documentId, chunk.text);
+      }
+    });
 
-      sqlite
-        .prepare("INSERT INTO document_chunks_fts (id, document_id, text) VALUES (?, ?, ?)")
-        .run(chunkId, documentId, chunk.text);
-    }
+    replace();
   },
 
   searchChunks(query: string, profileId?: string) {
     const sqlite = getSqliteClient();
+    const sanitizedQuery = sanitizeFtsQuery(query);
+    if (!sanitizedQuery) {
+      return [];
+    }
     const sqlText = profileId
       ? `SELECT dc.id, dc.document_id as documentId, dc.text, d.type
          FROM document_chunks_fts fts
@@ -135,12 +146,16 @@ export const documentsRepo = {
          LIMIT 10`;
 
     return profileId
-      ? sqlite.prepare(sqlText).all(query, profileId)
-      : sqlite.prepare(sqlText).all(query);
+      ? sqlite.prepare(sqlText).all(sanitizedQuery, profileId)
+      : sqlite.prepare(sqlText).all(sanitizedQuery);
   },
 
   searchDocuments(query: string, profileId?: string) {
     const sqlite = getSqliteClient();
+    const sanitizedQuery = sanitizeFtsQuery(query);
+    if (!sanitizedQuery) {
+      return [];
+    }
     const sqlText = profileId
       ? `SELECT d.*
          FROM documents_fts fts
@@ -154,7 +169,7 @@ export const documentsRepo = {
          LIMIT 10`;
 
     return profileId
-      ? (sqlite.prepare(sqlText).all(query, profileId) as Array<typeof documents.$inferSelect>)
-      : (sqlite.prepare(sqlText).all(query) as Array<typeof documents.$inferSelect>);
+      ? (sqlite.prepare(sqlText).all(sanitizedQuery, profileId) as Array<typeof documents.$inferSelect>)
+      : (sqlite.prepare(sqlText).all(sanitizedQuery) as Array<typeof documents.$inferSelect>);
   },
 };

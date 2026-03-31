@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { handleRouteError, ok } from "@/lib/api";
 import { geminiTasks } from "@/lib/gemini/tasks";
+import { assertRateLimit } from "@/lib/rate-limit";
 import { documentsRepo } from "@/lib/repositories/documentsRepo";
 import { ensureDatabaseReady } from "@/lib/services/bootstrap";
 
@@ -13,6 +14,7 @@ const resolveRequestSchema = z.object({
 export async function POST(request: Request) {
   try {
     ensureDatabaseReady();
+    assertRateLimit(request, "company:resolve", 15, 60_000);
     const body = resolveRequestSchema.parse(await request.json());
 
     let jobDescriptionSnippet: string | undefined;

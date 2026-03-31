@@ -31,6 +31,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intentionalStopRef = useRef(false);
   const lastFinalLenRef = useRef(0);
+  const restartAttemptsRef = useRef(0);
   const cbRef = useRef<SpeechRecognitionCallbacks>({});
   cbRef.current = {
     onTranscript: options.onTranscript,
@@ -59,6 +60,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     }
 
     lastFinalLenRef.current = 0;
+    restartAttemptsRef.current = 0;
     intentionalStopRef.current = false;
 
     const recognition = new Ctor();
@@ -98,6 +100,11 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
 
     recognition.onend = () => {
       if (!intentionalStopRef.current) {
+        if (restartAttemptsRef.current >= 3) {
+          setIsListening(false);
+          return;
+        }
+        restartAttemptsRef.current += 1;
         try { recognition.start(); } catch { setIsListening(false); }
       } else {
         setIsListening(false);
@@ -110,10 +117,15 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
         cbRef.current.onError?.("Microphone permission denied. Please allow microphone access.");
         intentionalStopRef.current = true;
         setIsListening(false);
+      } else if (event.error === "language-not-supported") {
+        cbRef.current.onError?.("Speech recognition language is not supported in this browser.");
+        intentionalStopRef.current = true;
+        setIsListening(false);
       } else if (event.error === "network") {
         cbRef.current.onError?.("Network error during speech recognition.");
       } else if (event.error !== "aborted" && event.error !== "no-speech") {
         console.error("Speech recognition error:", event.error);
+        setIsListening(false);
       }
     };
 
@@ -122,6 +134,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       recognitionRef.current = recognition;
       setIsListening(true);
     } catch {
+      setIsListening(false);
       cbRef.current.onError?.("Failed to start speech recognition.");
     }
   }, [lang, silenceMs]);

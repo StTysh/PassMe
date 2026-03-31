@@ -39,6 +39,11 @@ export const scoresRepo = {
     }
   },
 
+  deleteFeedbackItemsForSession(interviewSessionId: string) {
+    const db = getDb();
+    db.delete(feedbackItems).where(eq(feedbackItems.interviewSessionId, interviewSessionId)).run();
+  },
+
   listFeedbackItems(interviewSessionId: string) {
     const db = getDb();
     return db

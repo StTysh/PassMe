@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
 import { interviewSessions } from "@/db/schema";
@@ -53,31 +53,66 @@ export const interviewsRepo = {
   markSessionStarted(sessionId: string) {
     const db = getDb();
     const now = Date.now();
-    db.update(interviewSessions)
+    const result = db.update(interviewSessions)
       .set({ status: "active", startedAt: now, updatedAt: now })
       .where(eq(interviewSessions.id, sessionId))
       .run();
-    return this.getSessionById(sessionId);
+    return result.changes > 0 ? this.getSessionById(sessionId) : null;
   },
 
   markSessionCompleted(sessionId: string) {
     const db = getDb();
     const now = Date.now();
-    db.update(interviewSessions)
+    const result = db.update(interviewSessions)
       .set({ status: "completed", completedAt: now, updatedAt: now })
       .where(eq(interviewSessions.id, sessionId))
       .run();
-    return this.getSessionById(sessionId);
+    return result.changes > 0 ? this.getSessionById(sessionId) : null;
   },
 
   markSessionCancelled(sessionId: string) {
     const db = getDb();
     const now = Date.now();
-    db.update(interviewSessions)
+    const result = db.update(interviewSessions)
       .set({ status: "cancelled", completedAt: now, updatedAt: now })
       .where(eq(interviewSessions.id, sessionId))
       .run();
-    return this.getSessionById(sessionId);
+    return result.changes > 0 ? this.getSessionById(sessionId) : null;
+  },
+
+  markSessionStartedIfPlanned(sessionId: string) {
+    const db = getDb();
+    const now = Date.now();
+    const result = db.update(interviewSessions)
+      .set({ status: "active", startedAt: now, updatedAt: now })
+      .where(and(eq(interviewSessions.id, sessionId), eq(interviewSessions.status, "planned")))
+      .run();
+    return result.changes > 0 ? this.getSessionById(sessionId) : null;
+  },
+
+  markSessionCompletedIfActive(sessionId: string) {
+    const db = getDb();
+    const now = Date.now();
+    const result = db.update(interviewSessions)
+      .set({ status: "completed", completedAt: now, updatedAt: now })
+      .where(and(eq(interviewSessions.id, sessionId), eq(interviewSessions.status, "active")))
+      .run();
+    return result.changes > 0 ? this.getSessionById(sessionId) : null;
+  },
+
+  markSessionCancelledIfActiveOrPlanned(sessionId: string) {
+    const db = getDb();
+    const now = Date.now();
+    const result = db.update(interviewSessions)
+      .set({ status: "cancelled", completedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(interviewSessions.id, sessionId),
+          inArray(interviewSessions.status, ["planned", "active"]),
+        ),
+      )
+      .run();
+    return result.changes > 0 ? this.getSessionById(sessionId) : null;
   },
 
   listSessions() {

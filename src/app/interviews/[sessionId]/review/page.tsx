@@ -147,10 +147,10 @@ export default async function ReviewPage({
           .map((item) => (
             <RewrittenAnswerCard
               key={item.id}
-              originalTurnIndex={0}
+              originalTurnIndex={item.sourceTurnIdsJson?.[0] ?? 0}
               title={item.title}
               improvedAnswer={item.body}
-              rationale="Stored coaching output."
+              rationale={item.severity ?? "Stored coaching output."}
             />
           ))}
       </div>

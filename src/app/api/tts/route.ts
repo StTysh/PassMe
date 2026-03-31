@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { synthesizeSpeechStream, getElevenLabsApiKey } from "@/lib/elevenlabs/client";
+
+import { handleRouteError } from "@/lib/api";
+import { getElevenLabsApiKey, synthesizeSpeechStream } from "@/lib/elevenlabs/client";
 import { ttsProvider } from "@/lib/env";
+import { assertRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,9 +16,11 @@ const ttsRequestSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    assertRateLimit(request, "tts:stream", 30, 60_000);
+
     if (ttsProvider !== "elevenlabs") {
       return NextResponse.json(
-        { ok: false, error: "TTS_PROVIDER is set to browser — ElevenLabs API disabled" },
+        { ok: false, error: "TTS_PROVIDER is set to browser - ElevenLabs API disabled" },
         { status: 501 },
       );
     }
@@ -35,12 +40,10 @@ export async function POST(request: Request) {
       headers: {
         "Content-Type": "audio/mpeg",
         "Transfer-Encoding": "chunked",
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (error) {
-    console.error("[TTS API] Error:", error);
-    const message = error instanceof Error ? error.message : "TTS generation failed";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return handleRouteError(error);
   }
 }

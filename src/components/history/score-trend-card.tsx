@@ -34,7 +34,7 @@ const Y_TICKS = [0, 25, 50, 75, 100];
 export function ScoreTrendCard({ title = "Score trend", points }: ScoreTrendCardProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const hasData = points.length > 0 && points.some((p) => p.score > 0);
+  const hasData = points.length > 0;
 
   const latestDelta =
     points.length >= 2
@@ -69,7 +69,6 @@ export function ScoreTrendCard({ title = "Score trend", points }: ScoreTrendCard
       <CardContent className="flex min-h-0 flex-1 flex-col">
         {hasData ? (
           <div className="flex min-h-0 flex-1 gap-1">
-            {/* Y-axis labels */}
             <div className="flex flex-col justify-between pb-8 pr-1.5">
               {[...Y_TICKS].reverse().map((tick) => (
                 <span
@@ -81,9 +80,7 @@ export function ScoreTrendCard({ title = "Score trend", points }: ScoreTrendCard
               ))}
             </div>
 
-            {/* Chart area */}
             <div className="relative min-h-0 flex-1">
-              {/* Grid lines */}
               <div className="pointer-events-none absolute inset-x-0 bottom-8 top-0 flex flex-col justify-between">
                 {[...Y_TICKS].reverse().map((tick) => (
                   <div
@@ -93,10 +90,9 @@ export function ScoreTrendCard({ title = "Score trend", points }: ScoreTrendCard
                 ))}
               </div>
 
-              {/* Bars */}
               <div className="relative flex h-full items-end gap-1.5 pb-8">
                 {points.map((point, index) => {
-                  const pct = Math.max(4, (point.score / 100) * 100);
+                  const pct = Math.max(4, point.score);
                   const isHovered = hoveredIndex === index;
                   return (
                     <div
@@ -105,17 +101,15 @@ export function ScoreTrendCard({ title = "Score trend", points }: ScoreTrendCard
                       onMouseEnter={() => setHoveredIndex(index)}
                       onMouseLeave={() => setHoveredIndex(null)}
                     >
-                      {/* Tooltip */}
                       {isHovered && (
                         <div className="absolute -top-12 z-10 rounded-lg border border-border/50 bg-popover px-2.5 py-1.5 shadow-lg">
                           <p className="whitespace-nowrap text-xs font-bold tabular-nums">
-                            {Math.round(point.score)} — {bandLabel(point.score)}
+                            {Math.round(point.score)} - {bandLabel(point.score)}
                           </p>
                           <p className="text-[10px] text-muted-foreground">{point.label}</p>
                         </div>
                       )}
 
-                      {/* Bar */}
                       <div className="flex w-full flex-1 items-end">
                         <div
                           className={`w-full rounded-t-md bg-gradient-to-t ${barColor(point.score)} transition-all duration-500 ease-out ${
@@ -125,7 +119,6 @@ export function ScoreTrendCard({ title = "Score trend", points }: ScoreTrendCard
                         />
                       </div>
 
-                      {/* X-axis label */}
                       <div className="mt-1.5 text-center">
                         <p className="text-[10px] font-semibold tabular-nums text-muted-foreground">
                           {Math.round(point.score)}

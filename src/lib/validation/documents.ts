@@ -16,9 +16,45 @@ export const documentUploadMetadataSchema = z
 
 export const documentUploadSchema = documentUploadMetadataSchema
   .extend({
-    rawText: z.string().trim().optional(),
+    text: z.string().trim().optional(),
   })
   .strict();
+
+export const EXTRACT_PROFILE_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+export const EXTRACT_PROFILE_SUPPORTED_MIME_TYPES = new Set([
+  "application/pdf",
+  "text/plain",
+]);
+export const EXTRACT_PROFILE_SUPPORTED_EXTENSIONS = [".pdf", ".txt"];
+
+export function validateExtractProfileFile(file: File | null | undefined) {
+  if (!(file instanceof File)) {
+    throw new Error("No file provided.");
+  }
+
+  if (file.size === 0) {
+    throw new Error("File is empty.");
+  }
+
+  if (file.size > EXTRACT_PROFILE_MAX_FILE_SIZE_BYTES) {
+    throw new Error("File exceeds the 10 MB limit.");
+  }
+
+  const normalizedName = file.name.toLowerCase();
+  const hasSupportedExtension = EXTRACT_PROFILE_SUPPORTED_EXTENSIONS.some((extension) =>
+    normalizedName.endsWith(extension),
+  );
+  const hasSupportedMime = EXTRACT_PROFILE_SUPPORTED_MIME_TYPES.has(file.type);
+
+  if (!hasSupportedExtension && !hasSupportedMime) {
+    throw new Error("Unsupported file type. Upload a PDF or plain text file.");
+  }
+
+  return {
+    isPdf: file.type === "application/pdf" || normalizedName.endsWith(".pdf"),
+    isText: file.type === "text/plain" || normalizedName.endsWith(".txt"),
+  };
+}
 
 export const parseDocumentSchema = z
   .object({

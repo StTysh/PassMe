@@ -158,6 +158,7 @@ export const geminiTasks = {
     return generateStructured({
       prompt: buildCompanyResearchPrompt(companyName, jobTitle, jobDescriptionContext),
       schema: companyResearchSchema,
+      allowStaticFallback: false,
       fallback: () => ({
         confirmedName: companyName,
         industry: "Technology",
@@ -200,8 +201,8 @@ export const geminiTasks = {
       fallback: () => {
         const colors = ["#6366f1", "#10b981", "#f59e0b"];
         return [
-          { key: "interviewer_1", name: "Sarah Chen", role: "Hiring Manager", gender: "female" as const, personality: "Direct and results-oriented.", tone: "professional, warm but probing", voicePreference: "female-1", avatarColor: colors[0], focusAreas: ["ownership", "impact"], warmth: 60, skepticism: 55, challengeStyle: "balanced" as const, openingMessage: "Hi, I'm Sarah Chen — the hiring manager for this role. Thanks for making time today. Could you walk me through your background and what brought you to this opportunity?" },
-          { key: "interviewer_2", name: "James Rivera", role: "Senior Engineer", gender: "male" as const, personality: "Analytical and detail-oriented.", tone: "calm, precise, curious", voicePreference: "male-1", avatarColor: colors[1], focusAreas: ["technical depth", "problem-solving"], warmth: 45, skepticism: 70, challengeStyle: "sharp" as const, openingMessage: "Hey, James here — senior engineer on the team. Looking forward to digging into the technical side today." },
+          { key: "interviewer_1", name: "Sarah Chen", role: "Hiring Manager", gender: "female" as const, personality: "Direct and results-oriented.", tone: "professional, warm but probing", voicePreference: "female-1", avatarColor: colors[0], focusAreas: ["ownership", "impact"], warmth: 60, skepticism: 55, challengeStyle: "balanced" as const, openingMessage: "Hi, I'm Sarah Chen - the hiring manager for this role. Thanks for making time today. Could you walk me through your background and what brought you to this opportunity?" },
+          { key: "interviewer_2", name: "James Rivera", role: "Senior Engineer", gender: "male" as const, personality: "Analytical and detail-oriented.", tone: "calm, precise, curious", voicePreference: "male-1", avatarColor: colors[1], focusAreas: ["technical depth", "problem-solving"], warmth: 45, skepticism: 70, challengeStyle: "sharp" as const, openingMessage: "Hey, James here - senior engineer on the team. Looking forward to digging into the technical side today." },
           { key: "interviewer_3", name: "Priya Patel", role: "Team Lead", gender: "female" as const, personality: "Collaborative and people-focused.", tone: "encouraging, conversational", voicePreference: "female-2", avatarColor: colors[2], focusAreas: ["collaboration", "culture fit"], warmth: 75, skepticism: 35, challengeStyle: "soft" as const, openingMessage: "Hi! I'm Priya, I lead one of the engineering teams here. I'll be exploring how you work with others." },
         ].slice(0, input.panelSize);
       },
@@ -333,6 +334,7 @@ export const geminiTasks = {
         personaName: "Interview Loop",
       } as never),
       schema: evaluationSchema,
+      allowStaticFallback: false,
       fallback: () => {
         const transcript = input.transcript;
         const hasMetrics = /\d|percent|metric|revenue|users|growth/i.test(transcript);
@@ -407,6 +409,7 @@ export const geminiTasks = {
     return generateStructured({
       prompt: buildCoachSessionPrompt(input),
       schema: coachingSchema,
+      allowStaticFallback: false,
       fallback: () => ({
         rewrittenAnswers: input.evaluation.weakAnswerTargets.map((target) => ({
           originalTurnIndex: target.turnIndex,

@@ -99,7 +99,7 @@ export function InterviewChatClient({
     silenceMs: 2000,
   });
 
-  const voiceSupported = recognition.isSupported && synthesis.isSupported;
+  const voiceSupported = recognition.isSupported && synthesis.isSupported && (useElevenLabs || synthesis.voicesReady);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -207,7 +207,7 @@ export function InterviewChatClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ force: false }),
       });
-      toast.success("Interview finished — generating review...");
+      toast.success("Interview finished - generating review...");
       router.push(`/interviews/${sessionId}/review`);
       router.refresh();
     } catch (error) {
@@ -239,14 +239,29 @@ export function InterviewChatClient({
   const [confirmCancel, setConfirmCancel] = useState(false);
   const confirmCancelTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (confirmCancelTimeout.current) {
+        clearTimeout(confirmCancelTimeout.current);
+        confirmCancelTimeout.current = null;
+      }
+    };
+  }, []);
+
   function handleCancelClick() {
     if (!confirmCancel) {
       setConfirmCancel(true);
       if (confirmCancelTimeout.current) clearTimeout(confirmCancelTimeout.current);
-      confirmCancelTimeout.current = setTimeout(() => setConfirmCancel(false), 4000);
+      confirmCancelTimeout.current = setTimeout(() => {
+        setConfirmCancel(false);
+        confirmCancelTimeout.current = null;
+      }, 4000);
       return;
     }
-    if (confirmCancelTimeout.current) clearTimeout(confirmCancelTimeout.current);
+    if (confirmCancelTimeout.current) {
+      clearTimeout(confirmCancelTimeout.current);
+      confirmCancelTimeout.current = null;
+    }
     setConfirmCancel(false);
     void cancelInterview();
   }
@@ -287,12 +302,12 @@ export function InterviewChatClient({
           <div className="min-w-0">
             <CardTitle className="truncate">
               {panel.length > 1
-                ? `Panel Interview${companyName ? ` — ${companyName}` : ""}`
+                ? `Panel Interview${companyName ? ` - ${companyName}` : ""}`
                 : panel[0]?.name ?? sessionMeta.personaName}
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
               {sessionMeta.interviewType.replace(/_/g, " ")}
-              {panel.length > 1 ? ` · ${panel.length} interviewers` : ""}
+              {panel.length > 1 ? ` - ${panel.length} interviewers` : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -491,7 +506,7 @@ export function InterviewChatClient({
             {voiceMode ? (
               <span className="flex items-center gap-1.5">
                 <Headphones className="size-3" />
-                Speak your answer — auto-sends after a pause. Use headphones to avoid echo.
+                Speak your answer - auto-sends after a pause. Use headphones to avoid echo.
               </span>
             ) : (
               "Enter to send, Shift+Enter for newline"
@@ -586,7 +601,7 @@ export function InterviewChatClient({
                 <p className="text-xs font-semibold text-primary">Voice mode active</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {recognition.isListening
-                    ? "Mic is live — speak your answer"
+                    ? "Mic is live - speak your answer"
                     : synthesis.isSpeaking
                       ? (() => {
                           const speaker = synthesis.activeInterviewerKey

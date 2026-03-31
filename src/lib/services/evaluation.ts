@@ -50,7 +50,6 @@ export const evaluationService = {
     coaching: CoachingPayload;
   }) {
     ensureDatabaseReady();
-
     scoresRepo.createScore({
       id: undefined!,
       interviewSessionId: input.sessionId,
@@ -66,6 +65,7 @@ export const evaluationService = {
       createdAt: Date.now(),
     });
 
+    scoresRepo.deleteFeedbackItemsForSession(input.sessionId);
     scoresRepo.createFeedbackItems([
       ...input.evaluation.strengths.map((item) => ({
         interviewSessionId: input.sessionId,
@@ -93,6 +93,8 @@ export const evaluationService = {
         category: "rewritten_answer",
         title: item.title,
         body: item.improvedAnswer,
+        severity: item.rationale,
+        sourceTurnIdsJson: [item.originalTurnIndex],
       })),
       ...input.coaching.nextSteps.map((item) => ({
         interviewSessionId: input.sessionId,
