@@ -16,7 +16,7 @@ export const DEFAULT_DB_PATH = DEFAULT_DATABASE_PATH;
 export const FEATURE_FLAGS = {
   ENABLE_VOICE: false,
   ENABLE_SEARCH_PAGE: false,
-  ENABLE_DEMO_MODE: true,
+  ENABLE_DEMO_MODE: false,
 } as const;
 
 export const NAV_ITEMS = [

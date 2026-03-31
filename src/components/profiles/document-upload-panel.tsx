@@ -2,10 +2,10 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Upload, FileText, Loader2, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileText, Info, Loader2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -13,6 +13,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { DOCUMENT_TYPES } from "@/lib/constants";
 import { fetchJson } from "@/lib/fetcher";
 import type { CVValidationResult } from "@/lib/types/domain";
+
+function getSelectedFile(input: HTMLInputElement | null) {
+  return input?.files?.[0] ?? null;
+}
+
+function validateDocumentSubmission(file: File | null, text: string) {
+  if (!file && !text.trim()) {
+    throw new Error("Upload a file or paste document text.");
+  }
+}
 
 export function DocumentUploadPanel({ profileId }: { profileId: string }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -26,12 +36,14 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
     try {
       setPending(true);
       setValidation(null);
+      const file = getSelectedFile(fileRef.current);
+      validateDocumentSubmission(file, text);
+
       const formData = new FormData();
       formData.set("candidateProfileId", profileId);
       formData.set("type", type);
       formData.set("title", title);
       formData.set("text", text);
-      const file = fileRef.current?.files?.[0];
       if (file) {
         formData.set("file", file);
       }
@@ -42,21 +54,31 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
       });
 
       if (type === "resume" || type === "job_description") {
-        const parseResult = await fetchJson<{ parsed: Record<string, unknown> & { _validation?: CVValidationResult } }>("/api/documents/parse", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            documentId: result.documentId,
-            parseMode: type === "resume" ? "resume" : "job_description",
-          }),
-        });
+        try {
+          const parseResult = await fetchJson<{ parsed: Record<string, unknown> & { _validation?: CVValidationResult } }>("/api/documents/parse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              documentId: result.documentId,
+              parseMode: type === "resume" ? "resume" : "job_description",
+            }),
+          });
 
-        if (type === "resume" && parseResult.parsed?._validation) {
-          setValidation(parseResult.parsed._validation);
+          if (type === "resume" && parseResult.parsed?._validation) {
+            setValidation(parseResult.parsed._validation);
+          }
+          toast.success("Document saved and parsed");
+        } catch (error) {
+          toast.error(
+            error instanceof Error
+              ? `Document saved, but parsing failed: ${error.message}`
+              : "Document saved, but parsing failed",
+          );
         }
+      } else {
+        toast.success("Document saved");
       }
 
-      toast.success("Document saved and parsed");
       window.location.reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Upload failed");
@@ -90,7 +112,11 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
           </div>
           <div className="space-y-2">
             <Label>Title</Label>
-            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. My Resume 2026" />
+            <Input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="e.g. My Resume 2026"
+            />
           </div>
         </div>
         <div className="space-y-2">
@@ -135,9 +161,9 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
 }
 
 function CVValidationDisplay({ validation }: { validation: CVValidationResult }) {
-  const errors = validation.issues.filter((i) => i.severity === "error");
-  const warnings = validation.issues.filter((i) => i.severity === "warning");
-  const infos = validation.issues.filter((i) => i.severity === "info");
+  const errors = validation.issues.filter((issue) => issue.severity === "error");
+  const warnings = validation.issues.filter((issue) => issue.severity === "warning");
+  const infos = validation.issues.filter((issue) => issue.severity === "info");
 
   return (
     <div className="space-y-3 rounded-xl border border-border bg-background/60 p-4">
@@ -157,8 +183,8 @@ function CVValidationDisplay({ validation }: { validation: CVValidationResult })
 
       {errors.length > 0 && (
         <div className="space-y-1.5">
-          {errors.map((issue, i) => (
-            <div key={`e-${i}`} className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">
+          {errors.map((issue, index) => (
+            <div key={`e-${index}`} className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-red-400" />
               <div>
                 <span className="text-xs font-medium text-red-400">{issue.field}</span>
@@ -171,8 +197,8 @@ function CVValidationDisplay({ validation }: { validation: CVValidationResult })
 
       {warnings.length > 0 && (
         <div className="space-y-1.5">
-          {warnings.map((issue, i) => (
-            <div key={`w-${i}`} className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+          {warnings.map((issue, index) => (
+            <div key={`w-${index}`} className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
               <div>
                 <span className="text-xs font-medium text-amber-400">{issue.field}</span>
@@ -185,8 +211,8 @@ function CVValidationDisplay({ validation }: { validation: CVValidationResult })
 
       {infos.length > 0 && (
         <div className="space-y-1.5">
-          {infos.map((issue, i) => (
-            <div key={`i-${i}`} className="flex items-start gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+          {infos.map((issue, index) => (
+            <div key={`i-${index}`} className="flex items-start gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
               <Info className="mt-0.5 size-3.5 shrink-0 text-blue-400" />
               <div>
                 <span className="text-xs font-medium text-blue-400">{issue.field}</span>
@@ -199,10 +225,12 @@ function CVValidationDisplay({ validation }: { validation: CVValidationResult })
 
       {validation.suggestions.length > 0 && (
         <div className="border-t border-border pt-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Suggestions</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Suggestions
+          </p>
           <ul className="mt-1 space-y-1">
-            {validation.suggestions.map((s, i) => (
-              <li key={i} className="text-xs text-muted-foreground">• {s}</li>
+            {validation.suggestions.map((suggestion, index) => (
+              <li key={index} className="text-xs text-muted-foreground">- {suggestion}</li>
             ))}
           </ul>
         </div>

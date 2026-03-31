@@ -18,11 +18,15 @@ import type { PanelInterviewer } from "@/lib/types/domain";
 
 type Turn = {
   id?: string;
+  clientId?: string;
   speaker: "agent" | "candidate" | "system";
   text: string;
   questionCategory?: string | null;
   interviewerKey?: string | null;
+  pending?: boolean;
 };
+
+type SessionStatus = "planned" | "active" | "completed" | "cancelled";
 
 function getInitials(name: string) {
   return name
@@ -62,7 +66,11 @@ export function InterviewChatClient({
   const [started, setStarted] = useState(initialTurns.length > 0);
   const [voiceMode, setVoiceMode] = useState(voiceEnabled);
   const [showCountdown, setShowCountdown] = useState(!started && initialTurns.length === 0);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>(sessionMeta.status as SessionStatus);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const statusChannelRef = useRef<BroadcastChannel | null>(null);
+  const confirmCancelTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const voiceModeRef = useRef(voiceMode);
   voiceModeRef.current = voiceMode;
@@ -102,14 +110,82 @@ export function InterviewChatClient({
   const voiceSupported = recognition.isSupported && synthesis.isSupported && (useElevenLabs || synthesis.voicesReady);
 
   useEffect(() => {
+    if (sessionStatus !== "planned") {
+      setStarted(true);
+      setShowCountdown(false);
+    }
+    if (sessionStatus === "completed" || sessionStatus === "cancelled") {
+      setPending(false);
+      setConfirmCancel(false);
+      synthesis.cancel();
+      recognition.stop();
+    }
+  }, [recognition, sessionStatus, synthesis]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const channel = "BroadcastChannel" in window ? new BroadcastChannel("passme-interview-status") : null;
+    statusChannelRef.current = channel;
+
+    const handleStatus = (nextStatus: SessionStatus) => {
+      setSessionStatus(nextStatus);
+    };
+
+    if (channel) {
+      channel.onmessage = (event) => {
+        const data = event.data as { sessionId?: string; status?: SessionStatus } | null;
+        if (!data || data.sessionId !== sessionId || !data.status) return;
+        handleStatus(data.status);
+      };
+    }
+
+    const storageKey = `passme-interview-status:${sessionId}`;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== storageKey || !event.newValue) return;
+      try {
+        const data = JSON.parse(event.newValue) as { sessionId?: string; status?: SessionStatus };
+        if (data.sessionId === sessionId && data.status) {
+          handleStatus(data.status);
+        }
+      } catch {
+        // ignore malformed cross-tab payloads
+      }
+    };
+
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      channel?.close();
+      statusChannelRef.current = null;
+    };
+  }, [sessionId]);
+
+  const announceSessionStatus = useCallback((nextStatus: SessionStatus) => {
+    setSessionStatus(nextStatus);
+    if (typeof window === "undefined") return;
+
+    const payload = JSON.stringify({ sessionId, status: nextStatus, updatedAt: Date.now() });
+    try {
+      window.localStorage.setItem(`passme-interview-status:${sessionId}`, payload);
+      window.localStorage.removeItem(`passme-interview-status:${sessionId}`);
+    } catch {
+      // ignore storage failures
+    }
+
+    statusChannelRef.current?.postMessage({ sessionId, status: nextStatus });
+  }, [sessionId]);
+
+  useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns]);
 
   const doStart = useCallback(async () => {
-    if (started || pendingRef.current) return;
+    if (started || pendingRef.current || sessionStatus !== "planned") return;
     try {
       setPending(true);
-      const result = await fetchJson<{ firstMessage: string; interviewerKey: string }>("/api/interviews/start", {
+      const result = await fetchJson<{ firstMessage: string; interviewerKey: string; session?: { status?: SessionStatus } }>("/api/interviews/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId }),
@@ -121,6 +197,7 @@ export function InterviewChatClient({
         interviewerKey: result.interviewerKey,
       }]);
       setStarted(true);
+      announceSessionStatus(result.session?.status ?? "active");
 
       if (voiceModeRef.current) {
         synthesis.speakAs(result.firstMessage, result.interviewerKey);
@@ -130,8 +207,7 @@ export function InterviewChatClient({
     } finally {
       setPending(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, started]);
+  }, [announceSessionStatus, sessionId, sessionStatus, started, synthesis]);
 
   const handleCountdownComplete = useCallback(() => {
     setShowCountdown(false);
@@ -146,10 +222,16 @@ export function InterviewChatClient({
 
   async function sendTurnWithText(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || pendingRef.current) return;
+    if (!trimmed || pendingRef.current || sessionStatus !== "active") return;
 
     recognition.stop();
-    const candidateTurn: Turn = { speaker: "candidate", text: trimmed };
+    const candidateTurnId = crypto.randomUUID();
+    const candidateTurn: Turn = {
+      speaker: "candidate",
+      text: trimmed,
+      pending: true,
+      clientId: candidateTurnId,
+    };
     setTurns((prev) => [...prev, candidateTurn]);
     setMessage("");
 
@@ -165,6 +247,14 @@ export function InterviewChatClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ candidateMessage: trimmed }),
       });
+
+      setTurns((prev) =>
+        prev.map((turn) =>
+          turn.clientId === candidateTurnId
+            ? { ...turn, pending: false }
+            : turn,
+        ),
+      );
 
       setTurns((prev) => [
         ...prev,
@@ -186,6 +276,8 @@ export function InterviewChatClient({
         await finishInterview();
       }
     } catch (error) {
+      setTurns((prev) => prev.filter((turn) => turn.clientId !== candidateTurnId));
+      setMessage(trimmed);
       toast.error(error instanceof Error ? error.message : "Failed to send turn");
       if (voiceModeRef.current) recognition.start();
     } finally {
@@ -207,6 +299,7 @@ export function InterviewChatClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ force: false }),
       });
+      announceSessionStatus("completed");
       toast.success("Interview finished - generating review...");
       router.push(`/interviews/${sessionId}/review`);
       router.refresh();
@@ -235,9 +328,6 @@ export function InterviewChatClient({
       recognition.start();
     }
   }
-
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const confirmCancelTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
@@ -275,6 +365,7 @@ export function InterviewChatClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
+      announceSessionStatus("cancelled");
       toast.success("Interview cancelled");
       router.push("/interviews/new");
       router.refresh();
@@ -322,13 +413,13 @@ export function InterviewChatClient({
                 <span className="hidden sm:inline">{voiceMode ? "Voice on" : "Voice off"}</span>
               </Button>
             )}
-            <Badge variant="secondary">{sessionMeta.status}</Badge>
+            <Badge variant="secondary">{sessionStatus}</Badge>
             <Badge variant="outline">{sessionMeta.durationMinutes} min</Badge>
             <Button
               variant={confirmCancel ? "destructive" : "ghost"}
               size="sm"
               onClick={handleCancelClick}
-              disabled={pending}
+              disabled={pending || sessionStatus === "completed" || sessionStatus === "cancelled"}
               className="gap-1.5"
             >
               <X className="size-3.5" />
@@ -392,6 +483,11 @@ export function InterviewChatClient({
                       </p>
                     )}
                     <p className="whitespace-pre-wrap">{turn.text}</p>
+                    {turn.pending && (
+                      <Badge variant="outline" className="mt-2 text-[10px]">
+                        Sending...
+                      </Badge>
+                    )}
                     {turn.questionCategory && turn.speaker === "agent" && (
                       <Badge variant="outline" className="mt-2 text-[10px]">
                         {turn.questionCategory}
@@ -454,7 +550,7 @@ export function InterviewChatClient({
                   ? "Listening... speak your answer"
                   : "Type your answer..."
               }
-              disabled={pending || synthesis.isSpeaking}
+              disabled={pending || synthesis.isSpeaking || sessionStatus !== "active"}
               className="min-h-[56px] resize-none"
               rows={2}
               onKeyDown={(e) => {
@@ -470,7 +566,7 @@ export function InterviewChatClient({
                   size="icon"
                   variant={recognition.isListening ? "glow" : "outline"}
                   onClick={toggleMic}
-                  disabled={pending || synthesis.isSpeaking}
+                  disabled={pending || synthesis.isSpeaking || sessionStatus !== "active"}
                   className={recognition.isListening ? "voice-pulse" : ""}
                   aria-label={recognition.isListening ? "Stop listening" : "Start listening"}
                 >
@@ -484,7 +580,7 @@ export function InterviewChatClient({
                 <Button
                   size="icon"
                   onClick={sendTurn}
-                  disabled={pending || !message.trim()}
+                  disabled={pending || !message.trim() || sessionStatus !== "active"}
                   aria-label="Send message"
                 >
                   <Send className="size-4" />
@@ -494,7 +590,7 @@ export function InterviewChatClient({
                 size="icon"
                 variant="ghost"
                 onClick={() => void finishInterview()}
-                disabled={pending}
+                disabled={pending || sessionStatus === "completed" || sessionStatus === "cancelled"}
                 aria-label="End interview"
               >
                 <Square className="size-4" />
@@ -591,7 +687,7 @@ export function InterviewChatClient({
           </div>
           <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Status</span>
-            <Badge variant="secondary">{sessionMeta.status}</Badge>
+            <Badge variant="secondary">{sessionStatus}</Badge>
           </div>
 
           {voiceMode && (

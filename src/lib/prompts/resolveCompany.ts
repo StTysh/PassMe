@@ -11,7 +11,7 @@ export function buildResolveCompanyPrompt(
   jobDescriptionSnippet?: string,
 ): PromptDefinition<typeof companyResolutionSchema> {
   const systemInstruction = jsonOnlyInstruction(
-    "You are a company entity resolver. Given a company name (which may be ambiguous, abbreviated, misspelled, or could refer to multiple entities), identify the most likely real company the user means. Return a structured result with the top match, any alternative matches, and whether the result is ambiguous. Be honest about confidence — do not fake high confidence when you're unsure.",
+    "You are a company entity resolver. Given a company name that may be ambiguous, abbreviated, misspelled, or refer to multiple entities, identify the most likely real company the user means. Return a structured result with the top match, any alternative matches, and whether the result is ambiguous. Be honest about confidence - do not fake high confidence when you're unsure. Return every field in the schema; do not omit fields.",
   );
 
   const userPrompt = joinPromptSections(
@@ -26,23 +26,22 @@ export function buildResolveCompanyPrompt(
       "- industry: their primary industry",
       "- description: 2-3 sentence description of what they do",
       "- headquarters: city/country of HQ",
-      "- companySize: approximate (e.g., 'Startup (~50 employees)', 'Large enterprise (100k+)')",
+      "- companySize: approximate (e.g. 'Startup (~50 employees)', 'Large enterprise (100k+)')",
       "- website: their primary domain if known",
       "- confidence: 'high' if you're very sure this is the right company, 'medium' if likely but not certain, 'low' if this is a guess",
-      "- disambiguationNote: why this match vs alternatives (e.g., 'This is the tech company, not the insurance company with the same name')",
+      "- disambiguationNote: why this match vs alternatives (e.g. 'This is the tech company, not the insurance company with the same name')",
     ),
     joinPromptSections(
       "For ALTERNATIVES (if the name is ambiguous), provide up to 3 other possible companies with the same fields.",
       "Examples of ambiguity:",
-      "- 'Amazon' could mean Amazon.com (e-commerce/cloud) or Amazon (region)",
       "- 'Mercury' could be Mercury Financial, Mercury (banking app), or Mercury Systems (defense)",
-      "- 'Apple' is not ambiguous (clear tech company in this context)",
+      "- 'Apple' is clear in this context and should resolve to the tech company",
       "- A misspelled name like 'Gogle' should resolve to 'Google' with high confidence",
     ),
     joinPromptSections(
       "Set isAmbiguous to true if:",
       "- Multiple real companies share this name",
-      "- The name is very generic (e.g., 'National Solutions')",
+      "- The name is very generic (e.g. 'National Solutions')",
       "- You cannot determine which company with >80% certainty",
     ),
     joinPromptSections(

@@ -1,6 +1,5 @@
 import { handleRouteError, ok } from "@/lib/api";
 import { documentsRepo } from "@/lib/repositories/documentsRepo";
-import { interviewsRepo } from "@/lib/repositories/interviewsRepo";
 import { transcriptRepo } from "@/lib/repositories/transcriptRepo";
 import { ensureDatabaseReady } from "@/lib/services/bootstrap";
 import { searchQuerySchema } from "@/lib/validation/api";
@@ -25,13 +24,9 @@ export async function GET(request: Request) {
     }
 
     if (query.scope === "transcripts" || query.scope === "all") {
-      const allowedSessionIds = query.profileId
-        ? new Set(interviewsRepo.listSessionsForProfile(query.profileId).map((session) => session.id))
-        : null;
       results.push(
         ...transcriptRepo
-          .searchTranscript(query.q)
-          .filter((item) => !allowedSessionIds || allowedSessionIds.has(item.interviewSessionId))
+          .searchTranscript(query.q, query.profileId ? { profileId: query.profileId } : undefined)
           .map((item) => ({
           scope: "transcript",
           item,

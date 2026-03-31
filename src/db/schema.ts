@@ -43,7 +43,12 @@ export const documentChunks = sqliteTable("document_chunks", {
   tokenEstimate: integer("token_estimate"),
   metadataJson: text("metadata_json"),
   createdAt: integer("created_at").notNull(),
-});
+}, (table) => [
+  uniqueIndex("document_chunks_document_chunk_unique_idx").on(
+    table.documentId,
+    table.chunkIndex,
+  ),
+]);
 
 export const interviewPersonas = sqliteTable("interview_personas", {
   id: text("id").primaryKey(),
@@ -71,6 +76,7 @@ export const interviewSessions = sqliteTable(
     mode: text("mode").notNull(),
     durationMinutes: integer("duration_minutes").notNull(),
     status: text("status").notNull(),
+    resumeDocumentId: text("resume_document_id").references(() => documents.id),
     jobDocumentId: text("job_document_id").references(() => documents.id),
     companyName: text("company_name"),
     companyContextJson: text("company_context_json"),
@@ -83,6 +89,9 @@ export const interviewSessions = sqliteTable(
   },
   (table) => [
     index("interview_sessions_profile_created_idx").on(table.candidateProfileId, table.createdAt),
+    index("interview_sessions_resume_document_idx").on(table.resumeDocumentId),
+    index("interview_sessions_job_document_idx").on(table.jobDocumentId),
+    index("interview_sessions_profile_status_idx").on(table.candidateProfileId, table.status),
   ],
 );
 

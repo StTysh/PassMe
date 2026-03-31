@@ -4,6 +4,19 @@ import { getDb } from "@/db/client";
 import { feedbackItems, scores } from "@/db/schema";
 import { createId } from "@/lib/ids";
 
+function safeParseJson<T>(value: string | null, fallback: T, context: string): T {
+  if (!value) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch (error) {
+    console.warn(`[scoresRepo] Failed to parse ${context}`, error);
+    return fallback;
+  }
+}
+
 export const scoresRepo = {
   createScore(input: typeof scores.$inferInsert) {
     const db = getDb();
@@ -53,7 +66,11 @@ export const scoresRepo = {
       .all()
       .map((row) => ({
         ...row,
-        sourceTurnIdsJson: row.sourceTurnIdsJson ? JSON.parse(row.sourceTurnIdsJson) : null,
+        sourceTurnIdsJson: safeParseJson<number[] | null>(
+          row.sourceTurnIdsJson,
+          null,
+          "feedback_items.source_turn_ids_json",
+        ),
       }));
   },
 

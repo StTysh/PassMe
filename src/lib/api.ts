@@ -79,7 +79,28 @@ export function fail(code: string, message: string, status = 400, details?: unkn
   );
 }
 
+function isRequestBodyParseError(error: unknown) {
+  if (error instanceof SyntaxError) {
+    return true;
+  }
+
+  if (error instanceof TypeError) {
+    return /json|form data|formdata|multipart|request body/i.test(error.message);
+  }
+
+  return false;
+}
+
 export function handleRouteError(error: unknown) {
+  if (isRequestBodyParseError(error)) {
+    return fail(
+      "bad_request",
+      "Malformed request body.",
+      400,
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+
   if (error instanceof ApiError) {
     return fail(error.code, error.message, error.status, error.details);
   }

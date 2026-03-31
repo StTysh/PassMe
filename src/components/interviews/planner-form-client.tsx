@@ -118,6 +118,7 @@ export function PlannerFormClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             companyName: query,
+            candidateProfileId: profileId,
             jobTitle: selectedJob?.title,
             jobDocumentId: jobId,
           }),
@@ -142,7 +143,7 @@ export function PlannerFormClient({
         setStep("setup");
       }
     },
-    [jobId, jobs],
+    [jobId, jobs, profileId],
   );
 
   function handleCompanyConfirmed(company: CompanyCandidate) {

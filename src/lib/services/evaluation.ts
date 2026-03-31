@@ -1,6 +1,7 @@
 import { bandForScore, computeOverallScore } from "@/lib/scoring/rubric";
 import { normalizeDimensionScores } from "@/lib/scoring/normalize";
 import { geminiTasks } from "@/lib/gemini/tasks";
+import { NotFoundError } from "@/lib/api";
 import { documentsRepo } from "@/lib/repositories/documentsRepo";
 import { interviewsRepo } from "@/lib/repositories/interviewsRepo";
 import { scoresRepo } from "@/lib/repositories/scoresRepo";
@@ -13,14 +14,19 @@ export const evaluationService = {
     ensureDatabaseReady();
     const session = interviewsRepo.getSessionById(sessionId);
     if (!session) {
-      throw new Error("Session not found.");
+      throw new NotFoundError("Session not found.");
     }
 
     const turns = transcriptRepo.listTurnsForSession(sessionId);
     const transcript = turns.map((turn) => `${turn.speaker}: ${turn.text}`).join("\n");
-    const resume = session.candidateProfileId
-      ? documentsRepo.listDocumentsForProfile(session.candidateProfileId, "resume")[0]
-      : null;
+    const resume = session.resumeDocumentId
+      ? documentsRepo.getDocumentById(session.resumeDocumentId)
+      : session.candidateProfileId
+        ? documentsRepo.listDocumentsForProfile(session.candidateProfileId, "resume").find((doc) => doc.parsedJson)
+        : null;
+    if (session.resumeDocumentId && !resume) {
+      throw new NotFoundError("Session resume document not found.");
+    }
     const job = session.jobDocumentId ? documentsRepo.getDocumentById(session.jobDocumentId) : null;
 
     const evaluation = await geminiTasks.evaluateSession({

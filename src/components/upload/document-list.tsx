@@ -1,7 +1,14 @@
-import { FileText } from "lucide-react";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { FileText, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { fetchJson } from "@/lib/fetcher";
 
 export type DocumentItem = {
   id: string;
@@ -15,12 +22,35 @@ export type DocumentItem = {
 export type DocumentListProps = {
   documents: DocumentItem[];
   emptyLabel?: string;
+  allowDelete?: boolean;
 };
 
 export function DocumentList({
   documents,
   emptyLabel = "No documents yet.",
+  allowDelete = false,
 }: DocumentListProps) {
+  const router = useRouter();
+  const [pendingDocumentId, setPendingDocumentId] = useState<string | null>(null);
+
+  async function handleDelete(documentId: string, title: string) {
+    const confirmed = window.confirm(`Delete "${title}"? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setPendingDocumentId(documentId);
+      await fetchJson(`/api/documents/${documentId}`, { method: "DELETE" });
+      toast.success("Document deleted");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete document");
+    } finally {
+      setPendingDocumentId(null);
+    }
+  }
+
   return (
     <div className="space-y-2">
       {documents.length ? (
@@ -46,9 +76,25 @@ export function DocumentList({
               </div>
               <p className="text-xs text-muted-foreground">
                 {document.sourceFilename ?? "Pasted text"}
-                {document.updatedLabel ? ` · ${document.updatedLabel}` : ""}
+                {document.updatedLabel ? ` - ${document.updatedLabel}` : ""}
               </p>
             </div>
+            {allowDelete ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                disabled={pendingDocumentId === document.id}
+                onClick={() => void handleDelete(document.id, document.title)}
+                aria-label={`Delete ${document.title}`}
+              >
+                {pendingDocumentId === document.id ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Trash2 className="size-4" />
+                )}
+              </Button>
+            ) : null}
           </div>
         ))
       ) : (

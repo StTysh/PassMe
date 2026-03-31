@@ -17,7 +17,7 @@ export function buildGeneratePanelPrompt(input: {
   panelSize: number;
 }): PromptDefinition<typeof panelCoreArraySchema> {
   const systemInstruction = jsonOnlyInstruction(
-    `You are a world-class interview simulation designer. Create interviewer personas that feel like real professionals — each with a coherent identity, professional background, and distinct communication style grounded in the target company and role.`,
+    "You are a world-class interview simulation designer. Create interviewer personas that feel like real professionals - each with a coherent identity, professional background, and distinct communication style grounded in the target company and role.",
   );
 
   const panelRules =
@@ -29,12 +29,12 @@ export function buildGeneratePanelPrompt(input: {
       : input.panelSize === 2
         ? joinPromptSections(
             "TWO INTERVIEWER MODE:",
-            "Create two interviewers who complement each other — different evaluation styles, different communication styles, plausible working relationship.",
+            "Create two interviewers who complement each other - different evaluation styles, different communication styles, plausible working relationship.",
             "Vary genders. They should NOT ask the same style of questions.",
           )
         : joinPromptSections(
             "THREE INTERVIEWER MODE:",
-            "Create three interviewers forming a believable panel — e.g., hiring manager, technical lead, culture representative.",
+            "Create three interviewers forming a believable panel - e.g., hiring manager, technical lead, culture representative.",
             "Vary genders. Distribute focus areas to cover the role holistically.",
             "One should naturally lead opening and closing.",
           );
@@ -46,7 +46,9 @@ export function buildGeneratePanelPrompt(input: {
       "COMPANY CONTEXT:",
       `Company: ${input.companyResearch.confirmedName ?? "Unknown"} (${input.companyResearch.industry ?? "Unknown"})`,
       input.companyResearch.summary,
-      input.companyResearch.missionAndValues?.length ? `Values: ${input.companyResearch.missionAndValues.join(", ")}` : `Values: ${input.companyResearch.values.join(", ")}`,
+      input.companyResearch.missionAndValues?.length
+        ? `Values: ${input.companyResearch.missionAndValues.join(", ")}`
+        : `Values: ${input.companyResearch.values.join(", ")}`,
       `Culture: ${input.companyResearch.culture}`,
       `Interview style: ${input.companyResearch.interviewStyle}`,
       input.companyResearch.roleContribution ? `Role contribution: ${input.companyResearch.roleContribution}` : null,
@@ -89,10 +91,10 @@ export function buildGeneratePanelPrompt(input: {
       "- personality: 3-4 sentence paragraph capturing their essence",
       "- voicePreference: 'female-1', 'female-2', 'male-1', or 'male-2' (match gender)",
       "- avatarColor: pick from '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'",
-      "- openingMessage: Their actual first-person opening for this interview (3-6 sentences: greeting, intro, role, framing, transition, first question). Must sound like a real human.",
+      "- openingMessage: Their actual first-person opening for this interview (3-6 sentences: greeting, intro, role, framing, transition, first question). Must sound like a real human. If you cannot write a natural opening, return null rather than omitting the field.",
     ),
 
-    "CRITICAL: Every field must be specific and original. The openingMessage must sound natural, not templated. Different interviewers must sound genuinely different.",
+    "CRITICAL: Every field must be specific and original. Include every field in the JSON output. Use null instead of omitting any field that cannot be grounded confidently. The openingMessage must sound natural, not templated. Different interviewers must sound genuinely different.",
     "Return a JSON array.",
   );
 

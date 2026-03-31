@@ -2,7 +2,7 @@ import { FOLLOW_UP_CAP, TURN_HISTORY_WINDOW } from "@/lib/constants";
 import { getSqliteClient } from "@/db/client";
 import { assignVoiceToInterviewer, getElevenLabsApiKey } from "@/lib/elevenlabs/client";
 import { geminiTasks } from "@/lib/gemini/tasks";
-import { ConflictError, NotFoundError } from "@/lib/api";
+import { ConflictError, NotFoundError, UnprocessableEntityError } from "@/lib/api";
 import { applyInterestLevel } from "@/lib/personas/defaults";
 import { documentsRepo } from "@/lib/repositories/documentsRepo";
 import { interviewsRepo } from "@/lib/repositories/interviewsRepo";
@@ -14,7 +14,7 @@ import { buildRetrievalContext } from "@/lib/retrieval/context";
 import { ensureDatabaseReady } from "@/lib/services/bootstrap";
 import { evaluationService } from "@/lib/services/evaluation";
 import { companyResearchSchema } from "@/lib/types/domain";
-import type { PanelInterviewer, CompanyResearch } from "@/lib/types/domain";
+import type { InterviewPlan, PanelInterviewer, CompanyResearch } from "@/lib/types/domain";
 import { z } from "zod";
 
 const COMPANY_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -81,7 +81,9 @@ export const interviewsService = {
   }) {
     ensureDatabaseReady();
 
-    const resume = documentsRepo.listDocumentsForProfile(input.candidateProfileId, "resume")[0];
+    const resume = documentsRepo
+      .listDocumentsForProfile(input.candidateProfileId, "resume")
+      .find((doc) => Boolean(doc.parsedJson));
     const jobDocument = documentsRepo.getDocumentById(input.jobDocumentId);
     if (!jobDocument || jobDocument.candidateProfileId !== input.candidateProfileId) {
       throw new NotFoundError("Job description not found for this profile.");
@@ -90,10 +92,10 @@ export const interviewsService = {
       throw new ConflictError("Selected document is not a job description.");
     }
     if (!resume?.parsedJson) {
-      throw new Error("Resume must be parsed before planning.");
+      throw new UnprocessableEntityError("Resume must be parsed before planning.");
     }
     if (!jobDocument.parsedJson) {
-      throw new Error("Job description must be parsed before planning.");
+      throw new UnprocessableEntityError("Job description must be parsed before planning.");
     }
 
     const resumeProfile = resume.parsedJson as never;
@@ -176,6 +178,7 @@ export const interviewsService = {
       mode: "text",
       durationMinutes: input.durationMinutes,
       status: "planned",
+      resumeDocumentId: resume.id,
       jobDocumentId: input.jobDocumentId,
       companyName: input.companyName,
       companyContextJson: JSON.stringify(companyResearch),
@@ -236,13 +239,18 @@ export const interviewsService = {
     const firstMessage = leadInterviewer?.openingMessage
       ?? `Hi, I'm ${leadInterviewer?.name ?? "your interviewer"} - ${leadInterviewer?.role ?? "the interviewer for today"}. Thanks for taking the time to speak with us. I've had a look at your background and I'd love to start with a quick overview - could you walk me through your experience and what brought you to this opportunity?`;
 
-    transcriptRepo.appendTurn({
-      interviewSessionId: sessionId,
-      speaker: "agent",
-      text: firstMessage,
-      questionCategory: "opening",
-      interviewerKey,
-    });
+    try {
+      transcriptRepo.appendTurn({
+        interviewSessionId: sessionId,
+        speaker: "agent",
+        text: firstMessage,
+        questionCategory: "opening",
+        interviewerKey,
+      });
+    } catch (error) {
+      interviewsRepo.markSessionPlannedIfActive(sessionId);
+      throw error;
+    }
 
     return {
       firstMessage,
@@ -262,7 +270,7 @@ export const interviewsService = {
       throw new ConflictError("Session is not active.");
     }
 
-    transcriptRepo.appendTurn({
+    const candidateTurn = transcriptRepo.appendTurn({
       interviewSessionId: sessionId,
       speaker: "candidate",
       text: candidateMessage,
@@ -270,53 +278,59 @@ export const interviewsService = {
 
     const panel = (session.panelJson ?? []) as PanelInterviewer[];
     const companyResearch = (session.companyContextJson ?? null) as CompanyResearch | null;
+    const planJson = session.planJson as InterviewPlan | null;
 
-    const turns = transcriptRepo.listTurnsForSession(sessionId);
-    const agentTurns = turns.filter((turn) => turn.speaker === "agent");
-    const remainingQuestions = Math.max(
-      0,
-      (session.planJson?.starterQuestions.length ?? 4) - agentTurns.length,
-    );
-    const followUpsUsed = turns.filter(
-      (turn) =>
-        turn.speaker === "agent" &&
-        /specific|metric|measure|why|tradeoff|detail|exactly/i.test(turn.text),
-    ).length;
-    const contextSnippets = buildRetrievalContext(session.candidateProfileId, candidateMessage);
+    try {
+      const turns = transcriptRepo.listTurnsForSession(sessionId);
+      const agentTurns = turns.filter((turn) => turn.speaker === "agent");
+      const remainingQuestions = Math.max(
+        0,
+        (planJson?.starterQuestions?.length ?? 4) - agentTurns.length,
+      );
+      const followUpsUsed = turns.filter(
+        (turn) =>
+          turn.speaker === "agent" &&
+          /specific|metric|measure|why|tradeoff|detail|exactly/i.test(turn.text),
+      ).length;
+      const contextSnippets = buildRetrievalContext(session.candidateProfileId, candidateMessage);
 
-    const response = await geminiTasks.nextTurn({
-      sessionObjective:
-        session.planJson?.sessionObjective ?? "Assess role fit, ownership, and communication.",
-      interviewType: session.interviewType,
-      difficulty: session.difficulty,
-      recentTranscript: turns.slice(-TURN_HISTORY_WINDOW).map((turn) => ({
-        speaker: turn.speaker,
-        text: turn.text,
-        interviewerKey: turn.interviewerKey,
-      })),
-      contextSnippets,
-      remainingQuestions,
-      followUpBudget: Math.max(0, FOLLOW_UP_CAP - followUpsUsed),
-      panel,
-      companyResearch: companyResearch ?? undefined,
-    });
+      const response = await geminiTasks.nextTurn({
+        sessionObjective:
+          planJson?.sessionObjective ?? "Assess role fit, ownership, and communication.",
+        interviewType: session.interviewType,
+        difficulty: session.difficulty,
+        recentTranscript: turns.slice(-TURN_HISTORY_WINDOW).map((turn) => ({
+          speaker: turn.speaker,
+          text: turn.text,
+          interviewerKey: turn.interviewerKey,
+        })),
+        contextSnippets,
+        remainingQuestions,
+        followUpBudget: Math.max(0, FOLLOW_UP_CAP - followUpsUsed),
+        panel,
+        companyResearch: companyResearch ?? undefined,
+      });
 
-    const latestSession = interviewsRepo.getSessionById(sessionId);
-    if (!latestSession || latestSession.status !== "active") {
-      throw new ConflictError("Session is no longer active.");
+      const latestSession = interviewsRepo.getSessionById(sessionId);
+      if (!latestSession || latestSession.status !== "active") {
+        throw new ConflictError("Session is no longer active.");
+      }
+
+      const interviewerKey = response.interviewerKey ?? panel[0]?.key ?? "interviewer_1";
+
+      transcriptRepo.appendTurn({
+        interviewSessionId: sessionId,
+        speaker: "agent",
+        text: response.agentMessage,
+        questionCategory: response.questionCategory,
+        interviewerKey,
+      });
+
+      return { ...response, interviewerKey };
+    } catch (error) {
+      transcriptRepo.deleteTurn(candidateTurn.id);
+      throw error;
     }
-
-    const interviewerKey = response.interviewerKey ?? panel[0]?.key ?? "interviewer_1";
-
-    transcriptRepo.appendTurn({
-      interviewSessionId: sessionId,
-      speaker: "agent",
-      text: response.agentMessage,
-      questionCategory: response.questionCategory,
-      interviewerKey,
-    });
-
-    return { ...response, interviewerKey };
   },
 
   async finishInterview(sessionId: string) {

@@ -28,9 +28,13 @@ export default async function ProfileDetailPage({
   const parsedResume =
     workspace.documents.find((document) => document.type === "resume")?.parsedJson ?? null;
 
-  const hasResume = workspace.documents.some((d) => d.type === "resume");
-  const hasJob = workspace.documents.some((d) => d.type === "job_description");
-  const canInterview = hasResume && hasJob;
+  const resumeDocument = workspace.documents.find((d) => d.type === "resume") ?? null;
+  const jobDocument = workspace.documents.find((d) => d.type === "job_description") ?? null;
+  const hasResume = Boolean(resumeDocument);
+  const hasJob = Boolean(jobDocument);
+  const hasParsedResume = Boolean(resumeDocument?.parsedJson);
+  const hasParsedJob = Boolean(jobDocument?.parsedJson);
+  const canInterview = hasParsedResume && hasParsedJob;
 
   return (
     <div className="space-y-6">
@@ -68,13 +72,17 @@ export default async function ProfileDetailPage({
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm">
           <p className="font-medium text-amber-400">Missing documents</p>
           <p className="mt-1 text-muted-foreground">
-            To start an interview, upload{" "}
+            To start an interview, make sure you have{" "}
             {!hasResume && !hasJob
-              ? "a resume and a job description"
+              ? "a parsed resume and a parsed job description"
               : !hasResume
-                ? "a resume"
-                : "a job description"}{" "}
-            using the form below.
+                ? "a parsed resume"
+                : !hasJob
+                  ? "a parsed job description"
+                  : !hasParsedResume
+                    ? "a parsed resume"
+                    : "a parsed job description"}{" "}
+            available below. If a document failed to parse, delete it and upload it again.
           </p>
         </div>
       )}
@@ -90,11 +98,11 @@ export default async function ProfileDetailPage({
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Documents</CardTitle>
           <div className="flex gap-1.5">
-            <Badge variant={hasResume ? "success" : "outline"}>
-              {hasResume ? "Resume" : "No resume"}
+            <Badge variant={hasParsedResume ? "success" : "outline"}>
+              {hasParsedResume ? "Resume ready" : "Resume missing"}
             </Badge>
-            <Badge variant={hasJob ? "success" : "outline"}>
-              {hasJob ? "Job desc" : "No job desc"}
+            <Badge variant={hasParsedJob ? "success" : "outline"}>
+              {hasParsedJob ? "Job ready" : "Job missing"}
             </Badge>
           </div>
         </CardHeader>
@@ -107,6 +115,7 @@ export default async function ProfileDetailPage({
               sourceFilename: document.sourceFilename ?? undefined,
               parsedStatus: document.parsedJson ? "Parsed" : "Raw",
             }))}
+            allowDelete
           />
         </CardContent>
       </Card>

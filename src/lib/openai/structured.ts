@@ -57,14 +57,65 @@ function wrapArraySchema(schema: z.ZodTypeAny): z.ZodObject<{ items: z.ZodTypeAn
   return z.object({ items: schema });
 }
 
+function normalizeForOpenAIStrict(schema: z.ZodTypeAny): z.ZodTypeAny {
+  if (schema instanceof z.ZodOptional) {
+    return normalizeForOpenAIStrict(schema.unwrap() as z.ZodTypeAny).nullable();
+  }
+
+  if (schema instanceof z.ZodNullable) {
+    return normalizeForOpenAIStrict(schema.unwrap() as z.ZodTypeAny).nullable();
+  }
+
+  if (schema instanceof z.ZodDefault) {
+    return normalizeForOpenAIStrict(schema.removeDefault() as z.ZodTypeAny).default(
+      (schema.def as { defaultValue: unknown }).defaultValue,
+    );
+  }
+
+  if (schema instanceof z.ZodObject) {
+    const normalizedShape: Record<string, z.ZodTypeAny> = {};
+    for (const [key, value] of Object.entries(schema.shape)) {
+      normalizedShape[key] = normalizeForOpenAIStrict(value as z.ZodTypeAny);
+    }
+    return z.object(normalizedShape);
+  }
+
+  if (schema instanceof z.ZodArray) {
+    let normalizedArray = z.array(normalizeForOpenAIStrict(schema.element as z.ZodTypeAny));
+
+    const checks = (schema.def as { checks?: Array<{ _zod?: { def?: { check?: string; minimum?: number; maximum?: number; value?: number } } }> }).checks ?? [];
+    for (const check of checks) {
+      const def = check._zod?.def;
+      if (!def) continue;
+      if (def.check === "min_length" && typeof def.minimum === "number") {
+        normalizedArray = normalizedArray.min(def.minimum);
+      } else if (def.check === "max_length" && typeof def.maximum === "number") {
+        normalizedArray = normalizedArray.max(def.maximum);
+      } else if (def.check === "length_equals" && typeof def.value === "number") {
+        normalizedArray = normalizedArray.length(def.value);
+      }
+    }
+
+    return normalizedArray;
+  }
+
+  if (schema instanceof z.ZodPipe) {
+    const pipeDef = schema.def as unknown as { in: z.ZodTypeAny; out: z.ZodTypeAny };
+    return pipeDef.in.pipe(normalizeForOpenAIStrict(pipeDef.out));
+  }
+
+  return schema;
+}
+
 export async function generateOpenAIStructured<TSchema extends z.ZodTypeAny>(
   request: OpenAIStructuredRequest<TSchema>,
 ): Promise<OpenAIStructuredResult<z.infer<TSchema>>> {
   const model = resolveOpenAIModel(request.modelTier);
   const maxAttempts = 2;
 
-  const needsArrayWrap = isArraySchema(request.schema);
-  const effectiveSchema = needsArrayWrap ? wrapArraySchema(request.schema) : request.schema;
+  const strictSchema = normalizeForOpenAIStrict(request.schema);
+  const needsArrayWrap = isArraySchema(strictSchema);
+  const effectiveSchema = needsArrayWrap ? wrapArraySchema(strictSchema) : strictSchema;
   const effectivePrompt = needsArrayWrap
     ? `${request.prompt}\n\nIMPORTANT: Return your array inside a JSON object with key "items". Example: { "items": [...] }`
     : request.prompt;
@@ -87,7 +138,7 @@ export async function generateOpenAIStructured<TSchema extends z.ZodTypeAny>(
           { role: "system", content: systemContent },
           { role: "user", content: effectivePrompt },
         ],
-        response_format: zodResponseFormat(effectiveSchema, request.schemaName),
+        response_format: zodResponseFormat(effectiveSchema as z.ZodTypeAny, request.schemaName),
         temperature: request.temperature ?? undefined,
         max_tokens: request.maxOutputTokens ?? undefined,
       });

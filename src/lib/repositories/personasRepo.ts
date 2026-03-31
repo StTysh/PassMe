@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 
-import { getDb } from "@/db/client";
+import { getDb, getSqliteClient } from "@/db/client";
 import { interviewPersonas } from "@/db/schema";
 import { createId } from "@/lib/ids";
 import {
@@ -8,32 +8,41 @@ import {
   personaToConfigJson,
 } from "@/lib/personas/defaults";
 
+function safeParseJson<T>(value: string, fallback: T, context: string): T {
+  try {
+    return JSON.parse(value) as T;
+  } catch (error) {
+    console.warn(`[personasRepo] Failed to parse ${context}`, error);
+    return fallback;
+  }
+}
+
 export const personasRepo = {
   seedDefaultPersonas() {
-    const db = getDb();
+    const sqlite = getSqliteClient();
     const now = Date.now();
 
-    for (const persona of DEFAULT_PERSONA_DEFINITIONS) {
-      const existing = db
-        .select()
-        .from(interviewPersonas)
-        .where(eq(interviewPersonas.key, persona.key))
-        .get();
-
-      if (!existing) {
-        db.insert(interviewPersonas)
-          .values({
-          id: createId("persona"),
-          key: persona.key,
-          name: persona.name,
-          description: persona.description,
-          configJson: personaToConfigJson(persona.config),
-          createdAt: now,
-          updatedAt: now,
-        })
-          .run();
+    const seed = sqlite.transaction(() => {
+      for (const persona of DEFAULT_PERSONA_DEFINITIONS) {
+        sqlite
+          .prepare(
+            `INSERT OR IGNORE INTO interview_personas (
+              id, key, name, description, config_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            createId("persona"),
+            persona.key,
+            persona.name,
+            persona.description,
+            personaToConfigJson(persona.config),
+            now,
+            now,
+          );
       }
-    }
+    });
+
+    seed();
   },
 
   getPersonaByKey(key: string) {
@@ -44,14 +53,20 @@ export const personasRepo = {
       .where(eq(interviewPersonas.key, key))
       .get();
 
-    return row ? { ...row, configJson: JSON.parse(row.configJson) } : null;
+    return row
+      ? { ...row, configJson: safeParseJson(row.configJson, null, "interview_personas.config_json") }
+      : null;
   },
 
   listPersonas() {
     const db = getDb();
-    return db.select().from(interviewPersonas).all().map((row) => ({
-      ...row,
-      configJson: JSON.parse(row.configJson),
-    }));
+    return db
+      .select()
+      .from(interviewPersonas)
+      .all()
+      .flatMap((row) => {
+        const configJson = safeParseJson(row.configJson, null, "interview_personas.config_json");
+        return configJson ? [{ ...row, configJson }] : [];
+      });
   },
 };

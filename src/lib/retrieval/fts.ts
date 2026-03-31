@@ -7,7 +7,7 @@ export function searchDocumentChunks(query: string, profileId?: string, topK = R
 }
 
 export function searchTranscript(query: string, sessionId?: string, topK = RETRIEVAL_TOP_K) {
-  return transcriptRepo.searchTranscript(query, sessionId).slice(0, topK) as Array<{ text: string }>;
+  return transcriptRepo.searchTranscript(query, { sessionId }).slice(0, topK) as Array<{ text: string }>;
 }
 
 export function getRecentTranscriptWindow(sessionId: string, n: number) {

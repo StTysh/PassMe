@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { DOCUMENT_TYPES } from "@/lib/constants";
 import { fetchJson } from "@/lib/fetcher";
+import type { DocumentType } from "@/lib/types/domain";
 import { profileSchema } from "@/lib/validation/profile";
 
 import type { z } from "zod";
@@ -45,17 +46,37 @@ type ResumeExtract = {
   roles?: Array<{ title: string; company: string }>;
 };
 
+type UploadedDocument = {
+  id: string;
+  type: DocumentType;
+  title: string;
+};
+
+function getDocumentLabel(type: DocumentType) {
+  return DOCUMENT_TYPES.find((doc) => doc.value === type)?.label ?? type;
+}
+
 const STEPS = [
   { label: "Profile details", icon: User },
   { label: "Job description", icon: Upload },
 ] as const;
+
+function getSelectedFile(input: HTMLInputElement | null) {
+  return input?.files?.[0] ?? null;
+}
+
+function validateDocumentSubmission(file: File | null, text: string) {
+  if (!file && !text.trim()) {
+    throw new Error("Upload a file or paste document text.");
+  }
+}
 
 export function CreateProfileWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [resumeDocId, setResumeDocId] = useState<string | null>(null);
-  const [uploadedDocs, setUploadedDocs] = useState<string[]>([]);
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
 
   return (
     <div className="space-y-6">
@@ -103,7 +124,7 @@ export function CreateProfileWizard() {
             setProfileId(id);
             if (docId) {
               setResumeDocId(docId);
-              setUploadedDocs(["Resume"]);
+              setUploadedDocs([{ id: docId, type: "resume", title: "Resume" }]);
             }
             setStep(1);
           }}
@@ -115,8 +136,8 @@ export function CreateProfileWizard() {
           profileId={profileId}
           hasResume={!!resumeDocId}
           uploadedDocs={uploadedDocs}
-          onDocUploaded={(label) =>
-            setUploadedDocs((prev) => [...prev, label])
+          onDocUploaded={(doc) =>
+            setUploadedDocs((prev) => [...prev, doc])
           }
           onFinish={() => {
             router.push(`/profiles/${profileId}`);
@@ -241,6 +262,11 @@ function StepProfileWithCV({
   );
 
   const onSubmit = form.handleSubmit(async (values) => {
+    if (cvState === "uploading" || cvState === "parsing") {
+      toast.error("Wait for CV analysis to finish before continuing.");
+      return;
+    }
+
     const payload = {
       ...values,
       targetRoles: Array.isArray(values.targetRoles)
@@ -263,7 +289,7 @@ function StepProfileWithCV({
     const newProfileId = result.profile.id;
     let resumeDocId: string | null = null;
 
-    if (cvFile) {
+    if (cvFile && cvState === "done") {
       try {
         const formData = new FormData();
         formData.set("candidateProfileId", newProfileId);
@@ -277,14 +303,18 @@ function StepProfileWithCV({
         );
         resumeDocId = uploadResult.documentId;
 
-        await fetchJson("/api/documents/parse", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            documentId: uploadResult.documentId,
-            parseMode: "resume",
-          }),
-        });
+        try {
+          await fetchJson("/api/documents/parse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              documentId: uploadResult.documentId,
+              parseMode: "resume",
+            }),
+          });
+        } catch {
+          toast.error("CV uploaded, but resume parsing failed. You can retry from the profile page.");
+        }
       } catch {
         toast.error("CV upload failed - you can re-upload from your profile page");
       }
@@ -555,7 +585,10 @@ function StepProfileWithCV({
               />
             </div>
             <div className="flex justify-end sm:col-span-2">
-              <Button type="submit" disabled={isSubmitting}>
+              <Button
+                type="submit"
+                disabled={isSubmitting || cvState === "uploading" || cvState === "parsing"}
+              >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-1.5 size-4 animate-spin" />
@@ -585,8 +618,8 @@ function StepJobDescription({
 }: {
   profileId: string;
   hasResume: boolean;
-  uploadedDocs: string[];
-  onDocUploaded: (label: string) => void;
+  uploadedDocs: UploadedDocument[];
+  onDocUploaded: (doc: UploadedDocument) => void;
   onFinish: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -604,12 +637,13 @@ function StepJobDescription({
   async function handleUpload() {
     try {
       setPending(true);
+      const file = getSelectedFile(fileRef.current);
+      validateDocumentSubmission(file, text);
       const formData = new FormData();
       formData.set("candidateProfileId", profileId);
       formData.set("type", type);
       formData.set("title", title);
       formData.set("text", text);
-      const file = fileRef.current?.files?.[0];
       if (file) {
         formData.set("file", file);
       }
@@ -620,28 +654,53 @@ function StepJobDescription({
       );
 
       if (type === "resume" || type === "job_description") {
-        await fetchJson("/api/documents/parse", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            documentId: result.documentId,
-            parseMode: type === "resume" ? "resume" : "job_description",
-          }),
-        });
+        try {
+          await fetchJson("/api/documents/parse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              documentId: result.documentId,
+              parseMode: type === "resume" ? "resume" : "job_description",
+            }),
+          });
+          toast.success(`${DOCUMENT_TYPES.find((d) => d.value === type)?.label ?? type} saved and parsed`);
+        } catch (error) {
+          const docLabel =
+            DOCUMENT_TYPES.find((d) => d.value === type)?.label ?? type;
+          toast.error(
+            error instanceof Error
+              ? `${docLabel} saved, but parsing failed: ${error.message}`
+              : `${docLabel} saved, but parsing failed`,
+          );
+        }
+      } else {
+        const docLabel = getDocumentLabel(type);
+        toast.success(`${docLabel} saved`);
       }
 
-      const docLabel =
-        DOCUMENT_TYPES.find((d) => d.value === type)?.label ?? type;
-      onDocUploaded(title || docLabel);
-      toast.success(`${docLabel} saved and parsed`);
+      const docLabel = getDocumentLabel(type);
+      onDocUploaded({
+        id: result.documentId,
+        type,
+        title: title.trim() || docLabel,
+      });
 
       setTitle("");
       setText("");
       if (fileRef.current) fileRef.current.value = "";
 
-      if (type === "job_description" && !hasResume) {
+      const willHaveResume =
+        hasResume || uploadedDocs.some((doc) => doc.type === "resume") || type === "resume";
+      const willHaveJob =
+        uploadedDocs.some((doc) => doc.type === "job_description") || type === "job_description";
+
+      if (type === "job_description" && !willHaveResume) {
         setType("resume");
       } else if (type === "resume") {
+        setType("job_description");
+      } else if (!willHaveResume) {
+        setType("resume");
+      } else if (!willHaveJob) {
         setType("job_description");
       }
     } catch (error) {
@@ -651,13 +710,8 @@ function StepJobDescription({
     }
   }
 
-  const hasJob = uploadedDocs.some(
-    (d) =>
-      d.toLowerCase().includes("job") || d.toLowerCase().includes("description"),
-  );
-  const resumeReady = hasResume || uploadedDocs.some(
-    (d) => d.toLowerCase().includes("resume") || d.toLowerCase().includes("cv"),
-  );
+  const hasJob = uploadedDocs.some((doc) => doc.type === "job_description");
+  const resumeReady = hasResume || uploadedDocs.some((doc) => doc.type === "resume");
 
   return (
     <div className="space-y-4">
@@ -678,10 +732,10 @@ function StepJobDescription({
             <div className="space-y-1.5">
               <Label className="text-muted-foreground">Uploaded so far</Label>
               <div className="flex flex-wrap gap-1.5">
-                {uploadedDocs.map((doc, i) => (
-                  <Badge key={i} variant="success">
+                {uploadedDocs.map((doc) => (
+                  <Badge key={doc.id} variant="success">
                     <Check className="mr-1 size-3" />
-                    {doc}
+                    {doc.title}
                   </Badge>
                 ))}
               </div>
@@ -772,7 +826,7 @@ function StepJobDescription({
           )}
           {resumeReady && hasJob && (
             <p className="font-medium text-emerald-400">
-              You&apos;re all set - ready to start practicing interviews.
+              Documents uploaded. Review them on the profile page before starting an interview.
             </p>
           )}
         </div>

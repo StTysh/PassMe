@@ -19,16 +19,29 @@ export default async function InterviewSetupPage({
   const { profileId: preselectedProfileId } = await searchParams;
 
   const profiles = profilesService.listProfiles();
-  const jobs = profiles.flatMap((profile) =>
-    documentsRepo.listDocumentsForProfile(profile.id, "job_description").map((document) => ({
+  const eligibleProfiles = profiles.filter((profile) => {
+    const documents = documentsRepo.listDocumentsForProfile(profile.id);
+    const hasParsedResume = documents.some(
+      (document) => document.type === "resume" && Boolean(document.parsedJson),
+    );
+    const hasParsedJob = documents.some(
+      (document) => document.type === "job_description" && Boolean(document.parsedJson),
+    );
+    return hasParsedResume && hasParsedJob;
+  });
+  const jobs = eligibleProfiles.flatMap((profile) =>
+    documentsRepo
+      .listDocumentsForProfile(profile.id, "job_description")
+      .filter((document) => Boolean(document.parsedJson))
+      .map((document) => ({
       id: document.id,
       title: document.title ?? "Job description",
       candidateProfileId: profile.id,
     })),
   );
   const hasProfiles = profiles.length > 0;
-  const hasJobs = jobs.length > 0;
-  const ready = hasProfiles && hasJobs;
+  const hasInterviewReadyProfiles = eligibleProfiles.length > 0;
+  const ready = hasInterviewReadyProfiles && jobs.length > 0;
 
   return (
     <div className="space-y-6">
@@ -41,7 +54,7 @@ export default async function InterviewSetupPage({
 
       {ready ? (
         <PlannerFormClient
-          profiles={profiles}
+          profiles={eligibleProfiles}
           jobs={jobs}
           defaultProfileId={preselectedProfileId}
         />
@@ -63,12 +76,12 @@ export default async function InterviewSetupPage({
                 actionLabel="Create profile"
               />
               <SetupStep
-                done={hasJobs}
-                label="Upload a job description"
+                done={hasInterviewReadyProfiles}
+                label="Prepare parsed interview documents"
                 description={
                   hasProfiles
-                    ? "Go to your profile and upload the job posting you're targeting."
-                    : "Create a profile first, then upload a job description to it."
+                    ? "Go to your profile and make sure both your resume and job description are uploaded and parsed."
+                    : "Create a profile first, then upload and parse your resume and job description."
                 }
                 href={
                   hasProfiles

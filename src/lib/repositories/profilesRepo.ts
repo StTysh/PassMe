@@ -4,6 +4,15 @@ import { getDb } from "@/db/client";
 import { candidateProfiles } from "@/db/schema";
 import { createId } from "@/lib/ids";
 
+function safeParseJson<T>(value: string, fallback: T, context: string): T {
+  try {
+    return JSON.parse(value) as T;
+  } catch (error) {
+    console.warn(`[profilesRepo] Failed to parse ${context}`, error);
+    return fallback;
+  }
+}
+
 function mapProfile(row: typeof candidateProfiles.$inferSelect) {
   return {
     id: row.id,
@@ -11,7 +20,11 @@ function mapProfile(row: typeof candidateProfiles.$inferSelect) {
     headline: row.headline,
     email: row.email,
     yearsExperience: row.yearsExperience,
-    targetRoles: JSON.parse(row.targetRolesJson),
+    targetRoles: safeParseJson<string[]>(
+      row.targetRolesJson,
+      [],
+      "candidate_profiles.target_roles_json",
+    ),
     primaryDomain: row.primaryDomain,
     notes: row.notes,
     createdAt: row.createdAt,
