@@ -5,7 +5,14 @@ import { ArrowUpRight, BotMessageSquare, Menu, ShieldCheck } from "lucide-react"
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { NavSidebar } from "@/components/nav-sidebar";
 
 export function Header({ geminiReady }: { geminiReady?: boolean }) {
@@ -22,6 +29,12 @@ export function Header({ geminiReady }: { geminiReady?: boolean }) {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-72 p-0">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Navigation menu</SheetTitle>
+              <SheetDescription>
+                Browse pages and app sections from the mobile navigation drawer.
+              </SheetDescription>
+            </SheetHeader>
             <NavSidebar onNavigate={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
