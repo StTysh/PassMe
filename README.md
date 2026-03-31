@@ -1,5 +1,16 @@
 # Interview Loop
 
+Interview Loop is a local-first AI interview practice app for people who want mock interviews that actually reflect a real job they are targeting.
+
+Instead of giving you a generic chatbot and a canned prompt, the app takes your actual resume, your actual job description, and optional supporting context, then builds a role-aware interview plan, runs the interview, scores the session, and gives you concrete coaching on what to improve next.
+
+Why this project is interesting:
+
+- it turns interview prep into a personalized simulation instead of a generic Q&A toy
+- it keeps the full workflow in one product: profile, documents, planning, interview, review, and progress history
+- it is local-first, so transcripts, scores, and history stay in SQLite on your machine
+- it mixes structured AI outputs, retrieval, scoring, and interview state management in a practical product, not just a demo page
+
 Interview Loop is a local-first interview simulator and coaching app. It ingests a candidate's real materials, generates a role-aware interview plan, runs a realistic text interview, stores everything in local SQLite, and produces actionable review plus history.
 
 The product is intentionally narrow:
