@@ -6,7 +6,7 @@ export default function NewProfilePage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Create profile</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Set up your candidate details, then attach your resume and job description.
+          Drop your CV to auto-fill, or enter your details manually.
         </p>
       </div>
       <CreateProfileWizard />

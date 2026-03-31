@@ -1,16 +1,25 @@
 import { buildAnalyzeJobPrompt } from "@/lib/prompts/analyzeJob";
 import { buildInterviewPlanPrompt } from "@/lib/prompts/buildPlan";
 import { buildCoachSessionPrompt } from "@/lib/prompts/coachSession";
+import { buildCompanyResearchPrompt } from "@/lib/prompts/companyResearch";
+import { buildResolveCompanyPrompt } from "@/lib/prompts/resolveCompany";
 import { buildEvaluateSessionPrompt } from "@/lib/prompts/evaluateSession";
+import { buildEnrichPanelPrompt } from "@/lib/prompts/enrichPanel";
+import { buildGeneratePanelPrompt } from "@/lib/prompts/generatePanel";
 import { buildLiveInterviewerPrompt } from "@/lib/prompts/liveInterviewer";
 import { buildParseResumePrompt } from "@/lib/prompts/parseResume";
+import { buildValidateResumePrompt } from "@/lib/prompts/validateResume";
 import { generateStructured } from "@/lib/gemini/structured";
 import { createId } from "@/lib/ids";
 import type {
+  CVValidationResult,
+  CompanyResearch,
+  CompanyResolutionResult,
   CoachingPayload,
   EvaluationPayload,
   InterviewPlan,
   JobAnalysis,
+  PanelInterviewer,
   PersonaDefinition,
   ResumeProfile,
 } from "@/lib/types/domain";
@@ -22,6 +31,13 @@ import {
   jobAnalysisSchema,
   resumeProfileSchema,
 } from "@/lib/validation/api";
+import {
+  companyResearchSchema,
+  companyResolutionSchema,
+  cvValidationResultSchema,
+  panelCoreSchema,
+  panelEnrichmentSchema,
+} from "@/lib/types/domain";
 
 function sentences(input: string) {
   return input
@@ -84,6 +100,122 @@ export const geminiTasks = {
     });
   },
 
+  validateResume(resume: ResumeProfile) {
+    return generateStructured({
+      prompt: buildValidateResumePrompt(resume),
+      schema: cvValidationResultSchema,
+      fallback: () => {
+        const issues: CVValidationResult["issues"] = [];
+        if (!resume.professionalSummary || resume.professionalSummary.length < 20) {
+          issues.push({ field: "professionalSummary", severity: "error", message: "Professional summary is missing or too short." });
+        }
+        if (resume.roles.length === 0) {
+          issues.push({ field: "roles", severity: "error", message: "No work experience roles listed." });
+        }
+        for (const role of resume.roles) {
+          if (role.achievements.length === 0) {
+            issues.push({ field: `roles.${role.company}`, severity: "warning", message: `Role at ${role.company} has no achievements.` });
+          }
+        }
+        if (resume.metrics.length === 0) {
+          issues.push({ field: "metrics", severity: "warning", message: "No quantified metrics found anywhere in the resume." });
+        }
+        if (resume.skills.length < 3) {
+          issues.push({ field: "skills", severity: "info", message: "Very few skills listed. Consider adding more." });
+        }
+        return {
+          isValid: !issues.some((i) => i.severity === "error"),
+          issues,
+          suggestions: ["Add quantified metrics to each role.", "Include a strong professional summary."],
+        } satisfies CVValidationResult;
+      },
+    });
+  },
+
+  resolveCompany(companyName: string, jobTitle: string, jobDescriptionSnippet?: string) {
+    return generateStructured({
+      prompt: buildResolveCompanyPrompt(companyName, jobTitle, jobDescriptionSnippet),
+      schema: companyResolutionSchema,
+      fallback: () => ({
+        topMatch: {
+          name: companyName,
+          industry: "Technology",
+          description: `${companyName} is a company that the system could not fully resolve. Please verify this is the correct company.`,
+          headquarters: "Unknown",
+          companySize: "Unknown",
+          website: "Unknown",
+          confidence: "low" as const,
+          disambiguationNote: "Could not confidently identify this company. Manual confirmation recommended.",
+        },
+        alternatives: [],
+        isAmbiguous: true,
+        needsConfirmation: true,
+      } satisfies CompanyResolutionResult),
+    });
+  },
+
+  researchCompany(companyName: string, jobTitle: string, jobDescriptionContext?: string) {
+    return generateStructured({
+      prompt: buildCompanyResearchPrompt(companyName, jobTitle, jobDescriptionContext),
+      schema: companyResearchSchema,
+      fallback: () => ({
+        confirmedName: companyName,
+        industry: "Technology",
+        summary: `${companyName} is a company in the technology and business sector.`,
+        coreBusinessModel: "Unknown",
+        productsAndServices: [],
+        targetMarket: "Unknown",
+        positioning: "Unknown",
+        missionAndValues: ["innovation", "collaboration", "excellence"],
+        strategicPriorities: ["Growth and market leadership"],
+        currentInitiatives: ["Product development and market expansion"],
+        recentDirection: "Unknown",
+        hiringCultureSignals: [],
+        teamExpectations: "Professional environment focused on results and teamwork.",
+        interviewStyle: "Structured interviews with behavioral and technical components.",
+        roleContribution: `The ${jobTitle} role supports core business objectives at ${companyName}.`,
+        likelyCompetencyAreas: [],
+        likelyConcernsAboutCandidates: [],
+        confidenceLevel: "low" as const,
+        unknowns: ["Most company details could not be verified"],
+        values: ["innovation", "collaboration", "excellence"],
+        currentProjects: ["Product development and market expansion"],
+        goals: ["Growth and market leadership"],
+        culture: "Professional environment focused on results and teamwork.",
+        roleContext: `The ${jobTitle} role supports core business objectives at ${companyName}.`,
+      } satisfies CompanyResearch),
+    });
+  },
+
+  generateCorePanel(input: {
+    companyResearch: CompanyResearch;
+    jobAnalysis: JobAnalysis;
+    resumeProfile: ResumeProfile;
+    interviewType: string;
+    panelSize: number;
+  }) {
+    return generateStructured({
+      prompt: buildGeneratePanelPrompt(input),
+      schema: panelCoreSchema.array().min(1).max(3) as never,
+      fallback: () => {
+        const colors = ["#6366f1", "#10b981", "#f59e0b"];
+        return [
+          { key: "interviewer_1", name: "Sarah Chen", role: "Hiring Manager", gender: "female" as const, personality: "Direct and results-oriented.", tone: "professional, warm but probing", voicePreference: "female-1", avatarColor: colors[0], focusAreas: ["ownership", "impact"], warmth: 60, skepticism: 55, challengeStyle: "balanced" as const, openingMessage: "Hi, I'm Sarah Chen — the hiring manager for this role. Thanks for making time today. Could you walk me through your background and what brought you to this opportunity?" },
+          { key: "interviewer_2", name: "James Rivera", role: "Senior Engineer", gender: "male" as const, personality: "Analytical and detail-oriented.", tone: "calm, precise, curious", voicePreference: "male-1", avatarColor: colors[1], focusAreas: ["technical depth", "problem-solving"], warmth: 45, skepticism: 70, challengeStyle: "sharp" as const, openingMessage: "Hey, James here — senior engineer on the team. Looking forward to digging into the technical side today." },
+          { key: "interviewer_3", name: "Priya Patel", role: "Team Lead", gender: "female" as const, personality: "Collaborative and people-focused.", tone: "encouraging, conversational", voicePreference: "female-2", avatarColor: colors[2], focusAreas: ["collaboration", "culture fit"], warmth: 75, skepticism: 35, challengeStyle: "soft" as const, openingMessage: "Hi! I'm Priya, I lead one of the engineering teams here. I'll be exploring how you work with others." },
+        ].slice(0, input.panelSize);
+      },
+    });
+  },
+
+  enrichPanel(corePanel: Array<{ key: string; name: string; role: string; personality: string; gender: string; warmth: number; challengeStyle: string; focusAreas: string[] }>, companyName: string, jobTitle: string) {
+    return generateStructured({
+      prompt: buildEnrichPanelPrompt(corePanel, companyName, jobTitle),
+      schema: panelEnrichmentSchema.array() as never,
+      fallback: () => corePanel.map((c) => ({ key: c.key })),
+    });
+  },
+
   buildPlan(input: {
     interviewType: "recruiter_screen" | "hiring_manager" | "behavioral" | "technical_general" | "system_design_light";
     difficulty: "easy" | "realistic" | "hard";
@@ -92,6 +224,8 @@ export const geminiTasks = {
     persona: PersonaDefinition;
     resume: ResumeProfile;
     job: JobAnalysis;
+    companyResearch?: CompanyResearch | null;
+    panel?: PanelInterviewer[] | null;
   }) {
     return generateStructured({
       prompt: buildInterviewPlanPrompt({
@@ -102,6 +236,8 @@ export const geminiTasks = {
         persona: input.persona,
         resumeProfile: input.resume,
         jobAnalysis: input.job,
+        companyResearch: input.companyResearch,
+        panel: input.panel,
       } as never),
       schema: interviewPlanSchema,
       fallback: () => {
@@ -131,16 +267,17 @@ export const geminiTasks = {
   },
 
   async nextTurn(input: {
-    persona: PersonaDefinition;
     sessionObjective: string;
-    interviewType: "recruiter_screen" | "hiring_manager" | "behavioral" | "technical_general" | "system_design_light";
-    difficulty: "easy" | "realistic" | "hard";
-    interestLevel: "low" | "medium" | "high";
-    recentTranscript: Array<{ speaker: string; text: string }>;
+    interviewType: string;
+    difficulty: string;
+    recentTranscript: Array<{ speaker: string; text: string; interviewerKey?: string | null }>;
     contextSnippets: string[];
     remainingQuestions: number;
     followUpBudget: number;
+    panel: PanelInterviewer[];
+    companyResearch?: CompanyResearch | null;
   }) {
+    const defaultKey = input.panel[0]?.key ?? "interviewer_1";
     const fallback = () => {
       const lastCandidateTurn = [...input.recentTranscript]
         .reverse()
@@ -156,6 +293,7 @@ export const geminiTasks = {
           : input.remainingQuestions <= 1
             ? "Before we wrap, why does this role make sense as your next step?"
             : "Tell me about the tradeoffs you had to make and what you would do differently now.",
+        interviewerKey: defaultKey,
         questionCategory: needsEvidence ? "evidence" : "tradeoffs",
         shouldEnd: input.remainingQuestions <= 0,
       };
@@ -163,19 +301,16 @@ export const geminiTasks = {
 
     const structured = await generateStructured({
       prompt: buildLiveInterviewerPrompt({
-        persona: input.persona,
+        panel: input.panel,
+        companyResearch: input.companyResearch,
         interviewType: input.interviewType,
         difficulty: input.difficulty,
-        interestLevel: input.interestLevel,
         sessionObjective: input.sessionObjective,
-        currentQuestionCount: input.recentTranscript.filter((turn) => turn.speaker === "agent").length,
-        followUpCount: input.recentTranscript.filter((turn) => turn.speaker === "agent").length,
-        timeRemainingMinutes: 0,
-        remainingMainQuestionBudget: input.remainingQuestions,
-        remainingFollowUpBudget: input.followUpBudget,
-        recentTranscript: input.recentTranscript.map((turn) => `${turn.speaker}: ${turn.text}`).join("\n"),
-        retrievedContextSnippets: input.contextSnippets,
-      } as never),
+        recentTranscript: input.recentTranscript,
+        contextSnippets: input.contextSnippets,
+        remainingQuestions: input.remainingQuestions,
+        followUpBudget: input.followUpBudget,
+      }),
       schema: interviewerResponseSchema,
       fallback: fallback as never,
     });

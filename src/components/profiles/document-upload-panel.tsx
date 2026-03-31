@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Upload, FileText, Loader2 } from "lucide-react";
+import { Upload, FileText, Loader2, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { DOCUMENT_TYPES } from "@/lib/constants";
 import { fetchJson } from "@/lib/fetcher";
+import type { CVValidationResult } from "@/lib/types/domain";
 
 export function DocumentUploadPanel({ profileId }: { profileId: string }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -19,10 +20,12 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
+  const [validation, setValidation] = useState<CVValidationResult | null>(null);
 
   async function handleSubmit() {
     try {
       setPending(true);
+      setValidation(null);
       const formData = new FormData();
       formData.set("candidateProfileId", profileId);
       formData.set("type", type);
@@ -39,7 +42,7 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
       });
 
       if (type === "resume" || type === "job_description") {
-        await fetchJson("/api/documents/parse", {
+        const parseResult = await fetchJson<{ parsed: Record<string, unknown> & { _validation?: CVValidationResult } }>("/api/documents/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -47,6 +50,10 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
             parseMode: type === "resume" ? "resume" : "job_description",
           }),
         });
+
+        if (type === "resume" && parseResult.parsed?._validation) {
+          setValidation(parseResult.parsed._validation);
+        }
       }
 
       toast.success("Document saved and parsed");
@@ -102,6 +109,11 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
             className="min-h-[100px]"
           />
         </div>
+
+        {validation && (
+          <CVValidationDisplay validation={validation} />
+        )}
+
         <div className="flex justify-end">
           <Button type="button" onClick={handleSubmit} disabled={pending}>
             {pending ? (
@@ -119,5 +131,82 @@ export function DocumentUploadPanel({ profileId }: { profileId: string }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function CVValidationDisplay({ validation }: { validation: CVValidationResult }) {
+  const errors = validation.issues.filter((i) => i.severity === "error");
+  const warnings = validation.issues.filter((i) => i.severity === "warning");
+  const infos = validation.issues.filter((i) => i.severity === "info");
+
+  return (
+    <div className="space-y-3 rounded-xl border border-border bg-background/60 p-4">
+      <div className="flex items-center gap-2">
+        {validation.isValid ? (
+          <>
+            <CheckCircle2 className="size-4 text-emerald-400" />
+            <span className="text-sm font-semibold text-emerald-400">CV looks good</span>
+          </>
+        ) : (
+          <>
+            <AlertTriangle className="size-4 text-amber-400" />
+            <span className="text-sm font-semibold text-amber-400">CV needs attention</span>
+          </>
+        )}
+      </div>
+
+      {errors.length > 0 && (
+        <div className="space-y-1.5">
+          {errors.map((issue, i) => (
+            <div key={`e-${i}`} className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-red-400" />
+              <div>
+                <span className="text-xs font-medium text-red-400">{issue.field}</span>
+                <p className="text-xs text-muted-foreground">{issue.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {warnings.length > 0 && (
+        <div className="space-y-1.5">
+          {warnings.map((issue, i) => (
+            <div key={`w-${i}`} className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
+              <div>
+                <span className="text-xs font-medium text-amber-400">{issue.field}</span>
+                <p className="text-xs text-muted-foreground">{issue.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {infos.length > 0 && (
+        <div className="space-y-1.5">
+          {infos.map((issue, i) => (
+            <div key={`i-${i}`} className="flex items-start gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+              <Info className="mt-0.5 size-3.5 shrink-0 text-blue-400" />
+              <div>
+                <span className="text-xs font-medium text-blue-400">{issue.field}</span>
+                <p className="text-xs text-muted-foreground">{issue.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {validation.suggestions.length > 0 && (
+        <div className="border-t border-border pt-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Suggestions</p>
+          <ul className="mt-1 space-y-1">
+            {validation.suggestions.map((s, i) => (
+              <li key={i} className="text-xs text-muted-foreground">• {s}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }

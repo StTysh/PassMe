@@ -136,7 +136,7 @@ export const RETRIEVAL_TOP_K = 6;
 export const CHUNK_TARGET_SIZE = 650;
 export const CHUNK_OVERLAP = 120;
 export const FOLLOW_UP_CAP = 2;
-export const TURN_HISTORY_WINDOW = 8;
+export const TURN_HISTORY_WINDOW = 6;
 
 export const DEMO_PROFILE_NAME = "Alex Morgan";
 export const DEMO_PROFILE_ID = "profile_demo_alex_morgan";

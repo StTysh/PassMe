@@ -1,5 +1,7 @@
 import type { ZodTypeAny } from "zod";
 
+export type ModelTier = "default" | "lite";
+
 export interface PromptDefinition<TSchema extends ZodTypeAny = ZodTypeAny> {
   name: string;
   systemInstruction: string;
@@ -7,6 +9,7 @@ export interface PromptDefinition<TSchema extends ZodTypeAny = ZodTypeAny> {
   responseSchema: TSchema;
   temperature: number;
   maxOutputTokens: number;
+  modelTier?: ModelTier;
 }
 
 export function joinPromptSections(...sections: Array<string | null | undefined>) {

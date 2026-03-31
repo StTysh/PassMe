@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { PlannerFormClient } from "@/components/interviews/planner-form-client";
 import { EmptyState } from "@/components/empty-state";
-import { personasRepo } from "@/lib/repositories/personasRepo";
 import { documentsRepo } from "@/lib/repositories/documentsRepo";
 import { profilesService } from "@/lib/services/profiles";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,12 +26,6 @@ export default async function InterviewSetupPage({
       candidateProfileId: profile.id,
     })),
   );
-  const personas = personasRepo.listPersonas().map((persona) => ({
-    key: persona.key,
-    name: persona.name,
-    description: persona.description,
-  }));
-
   const hasProfiles = profiles.length > 0;
   const hasJobs = jobs.length > 0;
   const ready = hasProfiles && hasJobs;
@@ -50,7 +43,6 @@ export default async function InterviewSetupPage({
         <PlannerFormClient
           profiles={profiles}
           jobs={jobs}
-          personas={personas}
           defaultProfileId={preselectedProfileId}
         />
       ) : (

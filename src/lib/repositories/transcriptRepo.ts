@@ -18,6 +18,7 @@ export const transcriptRepo = {
     speaker: Speaker;
     text: string;
     questionCategory?: string | null;
+    interviewerKey?: string | null;
     metadataJson?: Record<string, unknown> | null;
   }) {
     const db = getDb();
@@ -39,6 +40,7 @@ export const transcriptRepo = {
         speaker: input.speaker,
         text: input.text,
         questionCategory: input.questionCategory ?? null,
+        interviewerKey: input.interviewerKey ?? null,
         metadataJson: input.metadataJson ? JSON.stringify(input.metadataJson) : null,
         createdAt: Date.now(),
       })

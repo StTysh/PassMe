@@ -10,6 +10,8 @@ import {
   type PersonaConfig,
   personaConfigSchema,
   type ResumeProfile,
+  type CompanyResearch,
+  type PanelInterviewer,
 } from "@/lib/types/domain";
 
 import {
@@ -59,6 +61,8 @@ export interface BuildPlanPromptInput {
   difficulty: Difficulty;
   interestLevel: InterestLevel;
   durationMinutes: number;
+  companyResearch?: CompanyResearch | null;
+  panel?: PanelInterviewer[] | null;
 }
 
 export function buildInterviewPlanPrompt(
@@ -72,6 +76,8 @@ export function buildInterviewPlanPrompt(
         difficulty: Difficulty;
         interestLevel: InterestLevel;
         durationMinutes: number;
+        companyResearch?: CompanyResearch | null;
+        panel?: PanelInterviewer[] | null;
       },
 ): PromptDefinition<typeof interviewPlanSchema> {
   const normalizedInput =
@@ -85,15 +91,58 @@ export function buildInterviewPlanPrompt(
           difficulty: input.difficulty,
           interestLevel: input.interestLevel,
           durationMinutes: input.durationMinutes,
+          companyResearch: input.companyResearch,
+          panel: input.panel,
         };
 
   const systemInstruction = jsonOnlyInstruction(
-    "You are an interview planning engine. Build a realistic, concise interview plan aligned to the candidate, role, persona, difficulty, and session duration.",
+    "You are an interview planning engine. Build a realistic, concise interview plan aligned to the candidate, role, company culture, persona, difficulty, and session duration. Questions should feel like they come from real interviewers at this specific company.",
+  );
+
+  const cr = normalizedInput.companyResearch;
+  const companySection = cr
+    ? joinPromptSections(
+        `Company: ${cr.confirmedName ?? "Unknown"} (${cr.industry ?? "Unknown"})`,
+        cr.summary,
+        cr.coreBusinessModel ? `Business model: ${cr.coreBusinessModel}` : null,
+        cr.missionAndValues?.length ? `Mission & values: ${cr.missionAndValues.join(", ")}` : `Values: ${cr.values.join(", ")}`,
+        `Culture: ${cr.culture}`,
+        cr.strategicPriorities?.length ? `Strategic priorities: ${cr.strategicPriorities.join(", ")}` : `Goals: ${cr.goals.join(", ")}`,
+        `Interview style: ${cr.interviewStyle}`,
+        cr.roleContribution ? `Role contribution: ${cr.roleContribution}` : `Role context: ${cr.roleContext}`,
+        cr.likelyCompetencyAreas?.length ? `Likely competency areas: ${cr.likelyCompetencyAreas.join(", ")}` : null,
+        cr.likelyConcernsAboutCandidates?.length ? `Interviewer concerns: ${cr.likelyConcernsAboutCandidates.join(", ")}` : null,
+        cr.hiringCultureSignals?.length ? `Hiring signals: ${cr.hiringCultureSignals.join("; ")}` : null,
+        cr.teamExpectations ? `Team expectations: ${cr.teamExpectations}` : null,
+      )
+    : null;
+
+  const panelSection = normalizedInput.panel?.length
+    ? joinPromptSections(
+        "Interview panel (questions should align with each interviewer's focus and style):",
+        ...normalizedInput.panel.map(
+          (p) =>
+            `- ${p.name} (${p.role}, ${p.department}): ${p.personality} Focus: ${p.focusAreas.join(", ")}. Interview philosophy: ${p.interviewPhilosophy}. Hiring priorities: ${p.hiringPriorities.join(", ")}. Starts ${p.startBroadOrSpecific}. Question preference: ${p.questionPreference}.`,
+        ),
+      )
+    : null;
+
+  const resumeSection = joinPromptSections(
+    `Resume summary: ${normalizedInput.resumeProfile.professionalSummary}`,
+    normalizedInput.resumeProfile.roles.length > 0
+      ? `Key roles: ${normalizedInput.resumeProfile.roles.map((r) => `${r.title} at ${r.company}`).join(", ")}`
+      : null,
+    normalizedInput.resumeProfile.skills.length > 0
+      ? `Skills: ${normalizedInput.resumeProfile.skills.join(", ")}`
+      : null,
+    normalizedInput.resumeProfile.metrics.length > 0
+      ? `Metrics: ${normalizedInput.resumeProfile.metrics.join("; ")}`
+      : null,
   );
 
   const userPrompt = joinPromptSections(
     numberedList(
-      "Hardcoded focus areas by interview type:",
+      "Focus areas by interview type:",
       INTERVIEW_TYPE_HEURISTICS[normalizedInput.interviewType],
     ),
     `Interview type: ${normalizedInput.interviewType}`,
@@ -101,14 +150,20 @@ export function buildInterviewPlanPrompt(
     `Interest level: ${normalizedInput.interestLevel}`,
     `Duration minutes: ${normalizedInput.durationMinutes}`,
     `Persona: ${normalizedInput.persona.name} (${normalizedInput.persona.key})`,
-    `Resume profile summary: ${normalizedInput.resumeProfile.professionalSummary}`,
-    `Job title guess: ${normalizedInput.jobAnalysis.titleGuess}`,
+    companySection,
+    panelSection,
+    resumeSection,
+    `Job title: ${normalizedInput.jobAnalysis.titleGuess} (${normalizedInput.jobAnalysis.seniority})`,
+    `Core competencies: ${normalizedInput.jobAnalysis.coreCompetencies.join(", ")}`,
+    `Must-have skills: ${normalizedInput.jobAnalysis.mustHaveSkills.join(", ")}`,
+    `Likely concerns: ${normalizedInput.jobAnalysis.likelyConcerns.join(", ")}`,
     "Plan requirements:",
     "- Keep the session realistic and within the duration.",
-    "- Target candidate strengths and likely gaps.",
-    "- Provide starter questions that fit the persona and interview type.",
+    "- Questions should reference the candidate's actual background and the company's priorities.",
+    "- Target candidate strengths and likely gaps based on the resume vs job requirements.",
+    "- Provide starter questions that feel natural for these specific interviewers at this company.",
+    "- Include questions that probe for company-specific fit and values alignment.",
     "- Keep follow-up rules practical and specific.",
-    "- Do not over-generalize beyond the target role.",
     "Return JSON matching the InterviewPlan schema exactly.",
   );
 
@@ -118,7 +173,8 @@ export function buildInterviewPlanPrompt(
     userPrompt,
     responseSchema: interviewPlanSchema,
     temperature: 0.2,
-    maxOutputTokens: 8192,
+    maxOutputTokens: 4096,
+    modelTier: "lite" as const,
   };
 }
 

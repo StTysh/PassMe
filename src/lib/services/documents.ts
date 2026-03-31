@@ -63,7 +63,9 @@ export const documentsService = {
 
     const parsed = await geminiTasks.parseResume(document.rawText);
     documentsRepo.updateParsedDocument(documentId, parsed);
-    return parsed;
+
+    const validation = await geminiTasks.validateResume(parsed);
+    return { ...parsed, _validation: validation };
   },
 
   async parseJobDocument(documentId: string) {

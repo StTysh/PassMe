@@ -9,6 +9,8 @@ function mapSession(row: typeof interviewSessions.$inferSelect) {
   return {
     ...row,
     planJson: row.planJson ? JSON.parse(row.planJson) : null,
+    companyContextJson: row.companyContextJson ? JSON.parse(row.companyContextJson) : null,
+    panelJson: row.panelJson ? JSON.parse(row.panelJson) : null,
   };
 }
 
@@ -63,6 +65,16 @@ export const interviewsRepo = {
     const now = Date.now();
     db.update(interviewSessions)
       .set({ status: "completed", completedAt: now, updatedAt: now })
+      .where(eq(interviewSessions.id, sessionId))
+      .run();
+    return this.getSessionById(sessionId);
+  },
+
+  markSessionCancelled(sessionId: string) {
+    const db = getDb();
+    const now = Date.now();
+    db.update(interviewSessions)
+      .set({ status: "cancelled", completedAt: now, updatedAt: now })
       .where(eq(interviewSessions.id, sessionId))
       .run();
     return this.getSessionById(sessionId);

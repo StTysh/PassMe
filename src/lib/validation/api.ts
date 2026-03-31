@@ -19,9 +19,10 @@ export {
 
 export const interviewerResponseSchema = z.object({
   agentMessage: z.string().min(1),
+  interviewerKey: z.string().min(1).default("interviewer_1"),
   questionCategory: z.string().min(1).optional(),
-  shouldEnd: z.boolean(),
-  rationale: z.string().min(1).optional(),
+  shouldEnd: z.preprocess((v) => (typeof v === "boolean" ? v : false), z.boolean()).default(false),
+  handoffNote: z.string().min(1).optional(),
 });
 
 export const apiErrorSchema = z

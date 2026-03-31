@@ -1,8 +1,22 @@
-import { z } from "zod";
+import { z, toJSONSchema } from "zod";
 
-import { GEMINI_DEFAULT_MODEL, GEMINI_JSON_RESPONSE_MIME_TYPE } from "@/lib/gemini/models";
+import { GEMINI_DEFAULT_MODEL, GEMINI_LITE_MODEL, GEMINI_JSON_RESPONSE_MIME_TYPE } from "@/lib/gemini/models";
 import { generateGeminiText, type GeminiTextResult } from "@/lib/gemini/text";
+import { generateOpenAIStructured } from "@/lib/openai/structured";
+import { getProviderForTask, hasGeminiApiKey, hasOpenAIApiKey } from "@/lib/env";
 import type { PromptDefinition } from "@/lib/prompts/shared";
+
+function toGeminiJsonSchema(schema: z.ZodTypeAny): unknown {
+  try {
+    const jsonSchema = toJSONSchema(schema);
+    const raw = jsonSchema as Record<string, unknown>;
+    delete raw.$schema;
+    return raw;
+  } catch (e) {
+    console.warn("[Gemini structured] Failed to convert Zod schema to JSON Schema:", e);
+    return undefined;
+  }
+}
 
 export interface GeminiStructuredRequest<TSchema extends z.ZodTypeAny> {
   prompt: string;
@@ -12,6 +26,7 @@ export interface GeminiStructuredRequest<TSchema extends z.ZodTypeAny> {
   temperature?: number;
   maxOutputTokens?: number;
   retryOnce?: boolean;
+  useNativeSchema?: boolean;
 }
 
 export type GeminiStructuredSuccess<TValue> = {
@@ -48,8 +63,16 @@ function extractJsonCandidate(text: string) {
     return fencedMatch[1].trim();
   }
 
+  const firstBracket = text.indexOf("[");
+  const lastBracket = text.lastIndexOf("]");
   const firstBrace = text.indexOf("{");
   const lastBrace = text.lastIndexOf("}");
+
+  const arrayFirst = firstBracket >= 0 && (firstBrace < 0 || firstBracket < firstBrace);
+  if (arrayFirst && lastBracket > firstBracket) {
+    return text.slice(firstBracket, lastBracket + 1).trim();
+  }
+
   if (firstBrace >= 0 && lastBrace > firstBrace) {
     return text.slice(firstBrace, lastBrace + 1).trim();
   }
@@ -94,6 +117,10 @@ function buildRetryInstruction(systemInstruction?: string) {
     .join("\n\n");
 }
 
+function isSchemaTooBigError(message: string): boolean {
+  return /too many states/i.test(message);
+}
+
 export async function generateGeminiStructured<TSchema extends z.ZodTypeAny>(
   request: GeminiStructuredRequest<TSchema>,
 ): Promise<GeminiStructuredResult<z.infer<TSchema>>> {
@@ -106,10 +133,16 @@ export async function generateGeminiStructured<TSchema extends z.ZodTypeAny>(
     attempts.push({ systemInstruction: buildRetryInstruction(request.systemInstruction) });
   }
 
+  const nativeSchema = request.useNativeSchema !== false
+    ? toGeminiJsonSchema(request.schema)
+    : undefined;
+  let schemaDropped = false;
+
   let lastFailure: GeminiStructuredFailure | null = null;
 
   for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex += 1) {
     const attempt = attempts[attemptIndex];
+    const useSchema = nativeSchema && !schemaDropped ? nativeSchema : undefined;
     const textResult: GeminiTextResult = await generateGeminiText({
       prompt: request.prompt,
       systemInstruction: attempt.systemInstruction,
@@ -117,9 +150,17 @@ export async function generateGeminiStructured<TSchema extends z.ZodTypeAny>(
       temperature: request.temperature,
       maxOutputTokens: request.maxOutputTokens,
       responseMimeType: GEMINI_JSON_RESPONSE_MIME_TYPE,
+      responseJsonSchema: useSchema,
     });
 
     if (!textResult.ok) {
+      if (!schemaDropped && nativeSchema && isSchemaTooBigError(textResult.message)) {
+        console.warn("[Gemini structured] Schema too complex for native constraint — retrying without it");
+        schemaDropped = true;
+        attemptIndex -= 1;
+        continue;
+      }
+
       console.error("[Gemini structured] text generation failed:", textResult.reason, textResult.message);
       lastFailure = {
         ok: false,
@@ -175,6 +216,11 @@ export async function generateGeminiStructured<TSchema extends z.ZodTypeAny>(
   };
 }
 
+function resolveGeminiModel(tier?: "default" | "lite"): string {
+  if (tier === "lite") return GEMINI_LITE_MODEL;
+  return GEMINI_DEFAULT_MODEL;
+}
+
 export async function generateStructured<T>({
   prompt,
   schema,
@@ -184,14 +230,62 @@ export async function generateStructured<T>({
   schema: z.ZodType<T>;
   fallback: () => T;
 }) {
-  const result = await generateGeminiStructured({
-    prompt: typeof prompt === "string" ? prompt : prompt.userPrompt,
-    schema,
-    systemInstruction: typeof prompt === "string" ? undefined : prompt.systemInstruction,
-    model: undefined,
-    temperature: typeof prompt === "string" ? undefined : prompt.temperature,
-    maxOutputTokens: typeof prompt === "string" ? undefined : prompt.maxOutputTokens,
-  });
+  const def = typeof prompt === "string" ? undefined : prompt;
+  const taskName = def?.name ?? "unknown";
+  const provider = getProviderForTask(taskName);
 
-  return result.ok ? result.value : fallback();
+  const promptText = def ? def.userPrompt : (prompt as string);
+  const oaiRequest = {
+    prompt: promptText,
+    schema: schema as z.ZodTypeAny,
+    schemaName: taskName,
+    systemInstruction: def?.systemInstruction,
+    modelTier: def?.modelTier,
+    temperature: def?.temperature,
+    maxOutputTokens: def?.maxOutputTokens,
+  };
+  const geminiRequest = {
+    prompt: promptText,
+    schema: schema as z.ZodTypeAny,
+    systemInstruction: def?.systemInstruction,
+    model: resolveGeminiModel(def?.modelTier),
+    temperature: def?.temperature,
+    maxOutputTokens: def?.maxOutputTokens,
+  };
+
+  if (provider === "openai") {
+    const oaiResult = await generateOpenAIStructured(oaiRequest);
+    if (oaiResult.ok) {
+      console.log(`[AI] ${taskName} → openai (${oaiResult.model})`);
+      return oaiResult.value as T;
+    }
+    console.warn(`[AI] ${taskName} → openai failed (${oaiResult.reason}), trying gemini fallback`);
+
+    if (hasGeminiApiKey) {
+      const geminiResult = await generateGeminiStructured(geminiRequest);
+      if (geminiResult.ok) {
+        console.log(`[AI] ${taskName} → gemini fallback (${geminiResult.model})`);
+        return geminiResult.value as T;
+      }
+      console.warn(`[AI] ${taskName} → gemini fallback also failed (${geminiResult.reason}), using static fallback`);
+    }
+    return fallback();
+  }
+
+  const result = await generateGeminiStructured(geminiRequest);
+  if (result.ok) {
+    console.log(`[AI] ${taskName} → gemini (${result.model})`);
+    return result.value as T;
+  }
+  console.warn(`[AI] ${taskName} → gemini failed (${result.reason}), trying openai fallback`);
+
+  if (hasOpenAIApiKey) {
+    const oaiResult = await generateOpenAIStructured(oaiRequest);
+    if (oaiResult.ok) {
+      console.log(`[AI] ${taskName} → openai fallback (${oaiResult.model})`);
+      return oaiResult.value as T;
+    }
+    console.warn(`[AI] ${taskName} → openai fallback also failed (${oaiResult.reason}), using static fallback`);
+  }
+  return fallback();
 }

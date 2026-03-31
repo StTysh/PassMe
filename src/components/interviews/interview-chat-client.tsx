@@ -1,31 +1,46 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Mic, MicOff, Send, Square, Volume2, Headphones } from "lucide-react";
+import { Mic, MicOff, Send, Square, Volume2, Headphones, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { InterviewCountdown } from "@/components/interviews/interview-countdown";
 import { fetchJson } from "@/lib/fetcher";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis";
+import type { PanelInterviewer } from "@/lib/types/domain";
 
 type Turn = {
   id?: string;
   speaker: "agent" | "candidate" | "system";
   text: string;
   questionCategory?: string | null;
+  interviewerKey?: string | null;
 };
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
 
 export function InterviewChatClient({
   sessionId,
   sessionMeta,
   initialTurns,
   voiceEnabled = false,
+  useElevenLabs = false,
+  panel = [],
+  companyName,
 }: {
   sessionId: string;
   sessionMeta: {
@@ -36,6 +51,9 @@ export function InterviewChatClient({
   };
   initialTurns: Turn[];
   voiceEnabled?: boolean;
+  useElevenLabs?: boolean;
+  panel?: PanelInterviewer[];
+  companyName?: string;
 }) {
   const router = useRouter();
   const [turns, setTurns] = useState<Turn[]>(initialTurns);
@@ -43,6 +61,7 @@ export function InterviewChatClient({
   const [pending, setPending] = useState(false);
   const [started, setStarted] = useState(initialTurns.length > 0);
   const [voiceMode, setVoiceMode] = useState(voiceEnabled);
+  const [showCountdown, setShowCountdown] = useState(!started && initialTurns.length === 0);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const voiceModeRef = useRef(voiceMode);
@@ -50,12 +69,21 @@ export function InterviewChatClient({
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
 
+  const panelMap = useRef(new Map<string, PanelInterviewer>());
+  useEffect(() => {
+    const m = new Map<string, PanelInterviewer>();
+    for (const p of panel) m.set(p.key, p);
+    panelMap.current = m;
+  }, [panel]);
+
   const synthesis = useSpeechSynthesis({
     onEnd() {
       if (voiceModeRef.current && !pendingRef.current) {
         recognition.start();
       }
     },
+    panel,
+    useElevenLabs,
   });
 
   const recognition = useSpeechRecognition({
@@ -77,31 +105,44 @@ export function InterviewChatClient({
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns]);
 
-  useEffect(() => {
-    if (started || pending) return;
+  const doStart = useCallback(async () => {
+    if (started || pendingRef.current) return;
+    try {
+      setPending(true);
+      const result = await fetchJson<{ firstMessage: string; interviewerKey: string }>("/api/interviews/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+      setTurns([{
+        speaker: "agent",
+        text: result.firstMessage,
+        questionCategory: "opening",
+        interviewerKey: result.interviewerKey,
+      }]);
+      setStarted(true);
 
-    void (async () => {
-      try {
-        setPending(true);
-        const result = await fetchJson<{ firstMessage: string }>("/api/interviews/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId }),
-        });
-        setTurns([{ speaker: "agent", text: result.firstMessage, questionCategory: "opening" }]);
-        setStarted(true);
-
-        if (voiceModeRef.current && synthesis.isSupported) {
-          synthesis.speak(result.firstMessage);
-        }
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to start interview");
-      } finally {
-        setPending(false);
+      if (voiceModeRef.current) {
+        synthesis.speakAs(result.firstMessage, result.interviewerKey);
       }
-    })();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to start interview");
+    } finally {
+      setPending(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending, sessionId, started]);
+  }, [sessionId, started]);
+
+  const handleCountdownComplete = useCallback(() => {
+    setShowCountdown(false);
+    void doStart();
+  }, [doStart]);
+
+  useEffect(() => {
+    if (showCountdown || started || pending) return;
+    void doStart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCountdown, started, pending]);
 
   async function sendTurnWithText(text: string) {
     const trimmed = text.trim();
@@ -116,6 +157,7 @@ export function InterviewChatClient({
       setPending(true);
       const result = await fetchJson<{
         agentMessage: string;
+        interviewerKey: string;
         questionCategory: string;
         shouldEnd: boolean;
       }>(`/api/interviews/${sessionId}/next-turn`, {
@@ -126,11 +168,16 @@ export function InterviewChatClient({
 
       setTurns((prev) => [
         ...prev,
-        { speaker: "agent", text: result.agentMessage, questionCategory: result.questionCategory },
+        {
+          speaker: "agent",
+          text: result.agentMessage,
+          questionCategory: result.questionCategory,
+          interviewerKey: result.interviewerKey,
+        },
       ]);
 
       if (voiceModeRef.current && synthesis.isSupported) {
-        synthesis.speak(result.agentMessage);
+        synthesis.speakAs(result.agentMessage, result.interviewerKey);
       }
 
       if (result.shouldEnd) {
@@ -189,13 +236,64 @@ export function InterviewChatClient({
     }
   }
 
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const confirmCancelTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleCancelClick() {
+    if (!confirmCancel) {
+      setConfirmCancel(true);
+      if (confirmCancelTimeout.current) clearTimeout(confirmCancelTimeout.current);
+      confirmCancelTimeout.current = setTimeout(() => setConfirmCancel(false), 4000);
+      return;
+    }
+    if (confirmCancelTimeout.current) clearTimeout(confirmCancelTimeout.current);
+    setConfirmCancel(false);
+    void cancelInterview();
+  }
+
+  async function cancelInterview() {
+    try {
+      setPending(true);
+      synthesis.cancel();
+      recognition.stop();
+      await fetchJson(`/api/interviews/${sessionId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      toast.success("Interview cancelled");
+      router.push("/interviews/new");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to cancel interview");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (showCountdown) {
+    return (
+      <InterviewCountdown
+        panel={panel}
+        companyName={companyName}
+        onComplete={handleCountdownComplete}
+      />
+    );
+  }
+
   return (
     <div className="grid gap-4 sm:gap-6 xl:grid-cols-[1.4fr_0.6fr]">
       <Card className="flex flex-col overflow-hidden">
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 border-b border-border bg-card/60 backdrop-blur-sm">
           <div className="min-w-0">
-            <CardTitle className="truncate">{sessionMeta.personaName}</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">{sessionMeta.interviewType}</p>
+            <CardTitle className="truncate">
+              {panel.length > 1
+                ? `Panel Interview${companyName ? ` — ${companyName}` : ""}`
+                : panel[0]?.name ?? sessionMeta.personaName}
+            </CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {sessionMeta.interviewType.replace(/_/g, " ")}
+              {panel.length > 1 ? ` · ${panel.length} interviewers` : ""}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {voiceEnabled && voiceSupported && (
@@ -211,6 +309,18 @@ export function InterviewChatClient({
             )}
             <Badge variant="secondary">{sessionMeta.status}</Badge>
             <Badge variant="outline">{sessionMeta.durationMinutes} min</Badge>
+            <Button
+              variant={confirmCancel ? "destructive" : "ghost"}
+              size="sm"
+              onClick={handleCancelClick}
+              disabled={pending}
+              className="gap-1.5"
+            >
+              <X className="size-3.5" />
+              <span className="hidden sm:inline">
+                {confirmCancel ? "Confirm cancel?" : "Cancel"}
+              </span>
+            </Button>
           </div>
         </CardHeader>
 
@@ -219,26 +329,63 @@ export function InterviewChatClient({
             className="flex-1 space-y-3 overflow-y-auto rounded-xl bg-background/40 p-3 sm:p-4"
             style={{ maxHeight: "60vh", minHeight: "300px" }}
           >
-            {turns.map((turn, index) => (
-              <div
-                key={`${turn.speaker}-${index}`}
-                className={`animate-slide-up max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed sm:max-w-[85%] ${
-                  turn.speaker === "candidate"
-                    ? "ml-auto rounded-br-md bg-primary text-primary-foreground shadow-md shadow-primary/10"
-                    : "rounded-bl-md bg-secondary/60 backdrop-blur-sm"
-                }`}
-              >
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest opacity-50">
-                  {turn.speaker === "candidate" ? "You" : "Interviewer"}
-                </p>
-                <p className="whitespace-pre-wrap">{turn.text}</p>
-                {turn.questionCategory && turn.speaker === "agent" && (
-                  <Badge variant="outline" className="mt-2 text-[10px]">
-                    {turn.questionCategory}
-                  </Badge>
-                )}
-              </div>
-            ))}
+            {turns.map((turn, index) => {
+              const interviewer = turn.interviewerKey
+                ? panelMap.current.get(turn.interviewerKey)
+                : panel[0];
+              const isActive = synthesis.isSpeaking && synthesis.activeInterviewerKey === turn.interviewerKey && index === turns.length - 1;
+
+              return (
+                <div
+                  key={`${turn.speaker}-${index}`}
+                  className={`animate-slide-up max-w-[90%] sm:max-w-[85%] ${
+                    turn.speaker === "candidate"
+                      ? "ml-auto"
+                      : ""
+                  }`}
+                >
+                  {turn.speaker === "agent" && interviewer && (
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <div
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm transition-shadow ${
+                          isActive ? "ring-2 ring-primary/50 shadow-lg shadow-primary/20" : ""
+                        }`}
+                        style={{ backgroundColor: interviewer.avatarColor }}
+                      >
+                        {getInitials(interviewer.name)}
+                      </div>
+                      <div>
+                        <span className="text-xs font-semibold">{interviewer.name}</span>
+                        <span className="ml-1.5 text-[10px] text-muted-foreground">{interviewer.role}</span>
+                      </div>
+                      {isActive && (
+                        <Volume2 className="size-3 animate-pulse text-primary" />
+                      )}
+                    </div>
+                  )}
+
+                  <div
+                    className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      turn.speaker === "candidate"
+                        ? "rounded-br-md bg-primary text-primary-foreground shadow-md shadow-primary/10"
+                        : "rounded-bl-md bg-secondary/60 backdrop-blur-sm"
+                    }`}
+                  >
+                    {turn.speaker === "candidate" && (
+                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest opacity-50">
+                        You
+                      </p>
+                    )}
+                    <p className="whitespace-pre-wrap">{turn.text}</p>
+                    {turn.questionCategory && turn.speaker === "agent" && (
+                      <Badge variant="outline" className="mt-2 text-[10px]">
+                        {turn.questionCategory}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
 
             {voiceMode && (synthesis.isSpeaking || recognition.isListening) && (
               <div className="flex items-center justify-center gap-2 py-4">
@@ -246,7 +393,12 @@ export function InterviewChatClient({
                   <>
                     <Volume2 className="size-5 animate-pulse text-primary" />
                     <span className="text-xs font-medium text-primary">
-                      Interviewer speaking...
+                      {(() => {
+                        const speaker = synthesis.activeInterviewerKey
+                          ? panelMap.current.get(synthesis.activeInterviewerKey)
+                          : null;
+                        return speaker ? `${speaker.name} is speaking...` : "Interviewer speaking...";
+                      })()}
                     </span>
                   </>
                 )}
@@ -348,22 +500,80 @@ export function InterviewChatClient({
         </CardContent>
       </Card>
 
+      {/* Panel sidebar */}
       <Card className="hidden xl:block">
         <CardHeader>
-          <CardTitle className="text-base">Session info</CardTitle>
+          <CardTitle className="text-base">
+            {panel.length > 1 ? "Interview Panel" : "Session info"}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          {[
-            { label: "Persona", value: sessionMeta.personaName },
-            { label: "Type", value: sessionMeta.interviewType },
-            { label: "Duration", value: `${sessionMeta.durationMinutes} min` },
-            { label: "Turns", value: String(turns.length) },
-          ].map((row) => (
-            <div key={row.label} className="flex justify-between gap-2">
-              <span className="text-muted-foreground">{row.label}</span>
-              <span className="font-medium">{row.value}</span>
+          {panel.length > 0 ? (
+            <div className="space-y-3">
+              {panel.map((interviewer) => {
+                const isSpeaking = synthesis.isSpeaking && synthesis.activeInterviewerKey === interviewer.key;
+                return (
+                  <div
+                    key={interviewer.key}
+                    className={`rounded-xl border p-3 transition-all duration-300 ${
+                      isSpeaking
+                        ? "border-primary/40 bg-primary/5 shadow-sm shadow-primary/10"
+                        : "border-border bg-background/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white transition-shadow ${
+                          isSpeaking ? "ring-2 ring-primary/50 shadow-md shadow-primary/20" : ""
+                        }`}
+                        style={{ backgroundColor: interviewer.avatarColor }}
+                      >
+                        {getInitials(interviewer.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{interviewer.name}</p>
+                        <p className="truncate text-[10px] text-muted-foreground">{interviewer.role}</p>
+                      </div>
+                      {isSpeaking && (
+                        <div className="ml-auto flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                          <span className="text-[10px] font-medium text-primary">Speaking</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {interviewer.focusAreas.map((area) => (
+                        <Badge key={area} variant="outline" className="text-[9px]">
+                          {area}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          ) : (
+            <>
+              {[
+                { label: "Persona", value: sessionMeta.personaName },
+                { label: "Type", value: sessionMeta.interviewType },
+                { label: "Duration", value: `${sessionMeta.durationMinutes} min` },
+                { label: "Turns", value: String(turns.length) },
+              ].map((row) => (
+                <div key={row.label} className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{row.label}</span>
+                  <span className="font-medium">{row.value}</span>
+                </div>
+              ))}
+            </>
+          )}
+
+          <Separator className="my-2" />
+
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground">Turns</span>
+            <span className="font-medium">{turns.length}</span>
+          </div>
           <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Status</span>
             <Badge variant="secondary">{sessionMeta.status}</Badge>
@@ -378,7 +588,12 @@ export function InterviewChatClient({
                   {recognition.isListening
                     ? "Mic is live — speak your answer"
                     : synthesis.isSpeaking
-                      ? "Interviewer is speaking..."
+                      ? (() => {
+                          const speaker = synthesis.activeInterviewerKey
+                            ? panelMap.current.get(synthesis.activeInterviewerKey)
+                            : null;
+                          return speaker ? `${speaker.name} is speaking...` : "Interviewer is speaking...";
+                        })()
                       : pending
                         ? "Processing your response..."
                         : "Voice ready"}

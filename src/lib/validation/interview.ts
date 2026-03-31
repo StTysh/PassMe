@@ -3,9 +3,7 @@ import { z } from "zod";
 import {
   difficultySchema,
   interviewTypeSchema,
-  interestLevelSchema,
   interviewerResponseSchema,
-  personaKeySchema,
   sessionModeSchema,
   sessionStatusSchema,
   speakerSchema,
@@ -15,10 +13,10 @@ export const interviewPlanRequestSchema = z
   .object({
     candidateProfileId: z.string().trim().min(1),
     jobDocumentId: z.string().trim().min(1),
-    personaKey: personaKeySchema,
+    companyName: z.string().trim().min(1),
+    panelSize: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     interviewType: interviewTypeSchema,
     difficulty: difficultySchema,
-    interestLevel: interestLevelSchema,
     durationMinutes: z.union([z.literal(5), z.literal(10), z.literal(15)]),
   })
   .strict();
